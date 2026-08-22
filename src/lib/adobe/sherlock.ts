@@ -51,7 +51,7 @@ export async function pullSherlockFromRoxyBrowser(): Promise<string> {
       // --remote-debugging-address=0.0.0.0：让 Chrome CDP 监听所有网卡，
       // 容器才能通过宿主机 IP 直连 CDP（默认只绑 127.0.0.1，容器够不到）。
       // 注意：--remote-debugging-port 是 Roxy 内置参数改不了，但 address 可改。
-      body: JSON.stringify({ workspaceId, dirId, forceOpen: true, headless: true, args: ["--remote-debugging-address=0.0.0.0", "--remote-allow-origins=*"] }),
+      body: JSON.stringify({ workspaceId, dirId, forceOpen: true, headless: true, args: ["--remote-debugging-address=0.0.0.0"] }),
     });
     const openJson = (await openRes.json()) as { code?: number; data?: { ws?: string } };
     let ws = openJson.data?.ws ?? "";
