@@ -65,7 +65,7 @@ export const config = {
   adobeGenerateTimeoutMs: () => parsePositiveInt(optional("ADOBE_GENERATE_TIMEOUT_MS"), 300_000),
   adobePollMs: () => parsePositiveInt(optional("ADOBE_POLL_MS"), 3_000),
   refreshIntervalMs: () => parsePositiveInt(optional("REFRESH_INTERVAL_HOURS"), 15) * 60 * 60 * 1000,
-  mediaMaxBytes: () => parsePositiveInt(optional("MEDIA_MAX_BYTES"), 20 * 1024 * 1024 * 1024),
+  mediaMaxBytes: () => parsePositiveInt(optional("MEDIA_MAX_BYTES"), 1024 * 1024 * 1024),
   mediaRetentionMs: () => parsePositiveInt(optional("MEDIA_RETENTION_DAYS"), 30) * 24 * 60 * 60 * 1000,
   // workerId 未显式配置时为每个进程生成唯一 ID（缓存），保证多副本 Worker 各自独占租约，
   // 不会互相续租/释放对方任务的租约。
