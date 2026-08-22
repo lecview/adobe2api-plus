@@ -1,19 +1,20 @@
 name: adobe2api-plus
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 一键部署：
-#   1. cp .env.example .env           # 填写 SESSION_SECRET / ENCRYPTION_KEY
-#   2. docker compose up -d --build   # 自动构建镜像并启动 mysql + web + worker
+# 一键部署（零配置，开箱即用）：
+#   docker compose up -d --build   # 自动构建镜像并启动 mysql + web + worker
 #
+# 默认管理员 admin / admin，密钥用内置默认值。
+# 生产环境务必在 .env 中覆盖 SESSION_SECRET / ENCRYPTION_KEY / 管理员密码。
 # 数据库表结构由应用首次启动时自动创建（幂等 migrate，无需手动 db:push）。
 # ─────────────────────────────────────────────────────────────────────────────
 
 x-app-env: &app-env
   DATABASE_URL: mysql://${MYSQL_USER:-adobe}:${MYSQL_PASSWORD:-adobe}@mysql:3306/${MYSQL_DATABASE:-adobe}
-  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required (see README)}
-  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required (see README)}
+  SESSION_SECRET: ${SESSION_SECRET:-ade29e218eecbf7cb7abf14c6fbb8bac5f9396cb2784c094d2a4dee1020abf53}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:-dbc3134bae062969b83084f7aced31710d55372228a1231066adc6c0777778ab}
   ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
-  ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-admin123}
+  ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-admin}
   MEDIA_ROOT: /app/data/generated
   NEXT_TELEMETRY_DISABLED: "1"
 

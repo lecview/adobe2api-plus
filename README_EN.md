@@ -59,28 +59,20 @@ git clone https://github.com/songsongQAQ/adobe2api-plus.git
 cd adobe2api-plus
 ```
 
-2. **Configure environment variables** (only two secrets required):
-
-```bash
-cp .env.example .env
-openssl rand -hex 32   # paste output into SESSION_SECRET in .env
-openssl rand -hex 16   # paste output into ENCRYPTION_KEY in .env
-```
-
-You may also set `ADMIN_BOOTSTRAP_USERNAME` / `ADMIN_BOOTSTRAP_PASSWORD` in `.env` (the admin account auto-created on first start).
-
-3. **Build and start everything in one command** (pulls MySQL 8, creates database and tables, starts Web + Worker):
+2. **Build and start everything in one command** (zero-config, works out of the box — pulls MySQL 8, creates database and tables, starts Web + Worker):
 
 ```bash
 docker compose up -d --build
 ```
 
-4. **Access the admin console**:
+3. **Access the admin console**:
 
 - URL: `http://127.0.0.1:3000/login`
-- Username: `admin` (or the one you set in `.env`)
-- Password: `ADMIN_BOOTSTRAP_PASSWORD` in `.env`; falls back to `admin123` if unset (**change it in production**)
+- Username: `admin`
+- Password: `admin`
 
+> - **Default admin credentials are `admin` / `admin`** (auto-created on first start) — **change them in production**.
+> - Secrets (`SESSION_SECRET` / `ENCRYPTION_KEY`) ship with built-in defaults, so it works out of the box. In production, create a `.env` to override them: `cp .env.example .env`, then generate your own with `openssl rand -hex 32` (session) and `openssl rand -hex 16` (encryption).
 > - MySQL 8 starts automatically with compose; tables are migrated automatically on first start — **no manual `db:push` needed**.
 > - Persistence: MySQL data in the `mysql-data` volume, generated media in the `generated-media` volume.
 > - Status / logs: `docker compose ps`, `docker compose logs -f web worker`.
