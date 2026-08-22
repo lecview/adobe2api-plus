@@ -44,7 +44,7 @@ const defaults: FormState = {
   proxyEnabled: false, publicBaseUrl: "",
   generateTimeoutSeconds: 300, videoGenerateTimeoutSeconds: 600, refreshIntervalHours: 15, sherlockRefreshMinutes: 5, sherlockAutoRefreshEnabled: true, minCreditsThreshold: 100, returnOriginalUrl: false, workerConcurrency: 5, retryEnabled: true, retryMaxAttempts: 3, retryBackoffSeconds: 1,
   retryOnStatusCodes: "429,451,500,502,503,504", retryOnErrorTypes: "timeout,connection,proxy", tokenRotationStrategy: "round_robin",
-  batchConcurrency: 5, creditsRefreshConcurrency: 1, accountMaxConcurrency: 3, generatedMaxSizeMb: 1024, generatedPruneSizeMb: 200, adminUsername: "admin",
+  batchConcurrency: 5, creditsRefreshConcurrency: 2, accountMaxConcurrency: 3, generatedMaxSizeMb: 1024, generatedPruneSizeMb: 200, adminUsername: "admin",
 };
 
 function csvValues(value: string): string[] { return value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean); }

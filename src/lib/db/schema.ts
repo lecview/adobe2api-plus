@@ -124,7 +124,7 @@ export const systemSetting = mysqlTable("systemsetting", {
   retryOnErrorTypes: json("retryOnErrorTypes"),
   tokenRotationStrategy: varchar("tokenRotationStrategy", { length: 32 }).default("round_robin").notNull(),
   batchConcurrency: int("batchConcurrency").default(5).notNull(),
-  creditsRefreshConcurrency: int("creditsRefreshConcurrency").default(1).notNull(),
+  creditsRefreshConcurrency: int("creditsRefreshConcurrency").default(2).notNull(),
   accountMaxConcurrency: int("accountMaxConcurrency").default(3).notNull(),
   generatedMaxSizeMb: int("generatedMaxSizeMb").default(1024).notNull(),
   generatedPruneSizeMb: int("generatedPruneSizeMb").default(200).notNull(),

@@ -1,0 +1,1 @@
+ALTER TABLE `systemsetting` MODIFY COLUMN `creditsRefreshConcurrency` int NOT NULL DEFAULT 2;

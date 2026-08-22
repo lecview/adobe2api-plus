@@ -122,7 +122,7 @@ export function normalizeSystemSettings(row?: SystemSettingRow | null): SystemSe
     retryMaxAttempts: 3,
     retryBackoffMs: 1000,
     batchConcurrency: 5,
-    creditsRefreshConcurrency: 1,
+    creditsRefreshConcurrency: 2,
     accountMaxConcurrency: 3,
     generatedMaxSizeMb: Math.round(config.mediaMaxBytes() / (1024 * 1024)),
     generatedPruneSizeMb: 200,
