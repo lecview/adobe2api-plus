@@ -469,24 +469,15 @@ Web 与 Worker 在启动前会主动校验配置（`validateRuntime`），关键
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `DATABASE_URL` | ✅ | MySQL 连接串（必须 `mysql:` 协议，含库名） |
-| `SESSION_SECRET` | ✅ | 会话加密密钥（≥32 字节，`openssl rand -hex 32` 生成） |
-| `ENCRYPTION_KEY` | ✅ | 凭据加密密钥（≥16 字节） |
-| `ADMIN_BOOTSTRAP_USERNAME` | — | 管理员初始账号 |
-| `ADMIN_BOOTSTRAP_PASSWORD` | — | 管理员初始密码 |
-| `MEDIA_ROOT` | — | 生成媒体目录，默认 `./data/generated` |
-| `MEDIA_PUBLIC_PREFIX` | — | 媒体对外前缀，默认 `/generated` |
-| `ADOBE_BASE_URL` | — | Adobe 上游基址 |
-| `ADOBE_API_KEY` | — | Adobe 上游 client id（默认 `clio-playground-web`） |
-| `ADOBE_TIMEOUT_MS` | — | 上游请求超时，默认 60000 |
-| `ADOBE_GENERATE_TIMEOUT_MS` | — | 生成超时，默认 300000 |
-| `REFRESH_INTERVAL_HOURS` | — | Token 自动刷新间隔，默认 15 |
-| `MEDIA_RETENTION_DAYS` | — | 媒体保留天数，默认 30 |
-| `WORKER_ID` | — | Worker 标识，默认 `worker-default` |
-| `ROXYBROWSER_API_BASE` | — | Roxy 浏览器 API 地址（自动铸造 sherlockToken 时必填） |
-| `ROXYBROWSER_API_TOKEN` | — | Roxy 浏览器 API Key（同上；工作区/窗口 ID 由程序自动获取） |
-| `ROXYBROWSER_CDP_HOST` | — | 容器内访问宿主机 RoxyBrowser 的 CDP 地址（如 `host.docker.internal`） |
-| `ROXYBROWSER_MINT_API` | — | 宿主机 sherlock 铸造服务地址（配置后优先走该服务，无需直连 CDP） |
+| `DATABASE_URL` | 本地开发 ✅ / Docker 自动 | MySQL 连接串（`mysql:` 协议，含库名） |
+| `SESSION_SECRET` | Docker 内置默认 | 会话签名密钥（≥32 字节） |
+| `ENCRYPTION_KEY` | Docker 内置默认 | 凭据加密密钥（≥16 字节） |
+| `ADMIN_BOOTSTRAP_USERNAME` | 默认 `admin` | 管理员初始账号（首次启动自动创建） |
+| `ADMIN_BOOTSTRAP_PASSWORD` | 默认 `admin` | 管理员初始密码 |
+
+> 其余参数（生成媒体目录、Adobe 上游地址、Token 刷新间隔、媒体保留时长、代理池等）均可在管理后台「系统设置」中配置，无需通过环境变量设置。
+>
+> sherlockToken 自动铸造用到的 Roxy 浏览器变量（`ROXYBROWSER_API_BASE` / `ROXYBROWSER_API_TOKEN` 等）见 `.env.example`；不配置则走后台手动输入 token。
 
 ---
 

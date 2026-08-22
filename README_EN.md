@@ -467,24 +467,15 @@ The web and worker processes validate their configuration up front (`validateRun
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | ✅ | MySQL connection string (must use the `mysql:` scheme and include a database name) |
-| `SESSION_SECRET` | ✅ | Session encryption secret (≥32 bytes, generate with `openssl rand -hex 32`) |
-| `ENCRYPTION_KEY` | ✅ | Credential encryption key (≥16 bytes) |
-| `ADMIN_BOOTSTRAP_USERNAME` | — | Initial admin account |
-| `ADMIN_BOOTSTRAP_PASSWORD` | — | Initial admin password |
-| `MEDIA_ROOT` | — | Generated media directory, default `./data/generated` |
-| `MEDIA_PUBLIC_PREFIX` | — | Media public prefix, default `/generated` |
-| `ADOBE_BASE_URL` | — | Upstream Adobe base URL |
-| `ADOBE_API_KEY` | — | Upstream Adobe client id (default `clio-playground-web`) |
-| `ADOBE_TIMEOUT_MS` | — | Upstream request timeout, default 60000 |
-| `ADOBE_GENERATE_TIMEOUT_MS` | — | Generation timeout, default 300000 |
-| `REFRESH_INTERVAL_HOURS` | — | Token auto-refresh interval, default 15 |
-| `MEDIA_RETENTION_DAYS` | — | Media retention days, default 30 |
-| `WORKER_ID` | — | Worker identifier, default `worker-default` |
-| `ROXYBROWSER_API_BASE` | — | Roxy browser API base URL (required for automatic sherlockToken minting) |
-| `ROXYBROWSER_API_TOKEN` | — | Roxy browser API key (same as above; workspace/window IDs are resolved automatically) |
-| `ROXYBROWSER_CDP_HOST` | — | Host reachable CDP address for RoxyBrowser when running in a container (e.g. `host.docker.internal`) |
-| `ROXYBROWSER_MINT_API` | — | Host sherlock minting service URL (when set, preferred over direct CDP minting) |
+| `DATABASE_URL` | Local dev ✅ / Docker auto | MySQL connection string (`mysql:` scheme, includes a database name) |
+| `SESSION_SECRET` | Docker built-in default | Session signing secret (≥32 bytes) |
+| `ENCRYPTION_KEY` | Docker built-in default | Credential encryption key (≥16 bytes) |
+| `ADMIN_BOOTSTRAP_USERNAME` | default `admin` | Initial admin account (auto-created on first start) |
+| `ADMIN_BOOTSTRAP_PASSWORD` | default `admin` | Initial admin password |
+
+> All other settings (media directory, Adobe upstream URL, token refresh interval, media retention, proxy pool, etc.) are configurable in the admin console under **System Settings** — no environment variables needed.
+>
+> The Roxy browser variables used for automatic sherlockToken minting (`ROXYBROWSER_API_BASE` / `ROXYBROWSER_API_TOKEN`, etc.) are listed in `.env.example`; if unset, you can enter the token manually in the admin console.
 
 ---
 
