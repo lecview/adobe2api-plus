@@ -64,23 +64,20 @@ cd adobe2api-plus
 2. **一键构建并启动**（零配置，开箱即用——自动拉取 MySQL 8 镜像、创建数据库与表结构、启动 Web + Worker）：
 
 ```bash
-docker compose up -d --build
+./start.sh          # 推荐：自动探测宿主机 IP 并注入 sherlock 自动铸造所需变量
+# 等价于手动执行：
+# docker compose up -d --build
 ```
 
 3. **sherlockToken 自动铸造（可选，需 Roxy 浏览器）**：
 
-sherlockToken 铸造要连接 Roxy 浏览器打开的 Chrome（CDP 端口只监听宿主机 `127.0.0.1`，容器无法直连）。因此在 macOS / Docker Desktop 下自动铸造需在**宿主机**额外跑一个铸造服务：
-
-```bash
-# 先在 .env 里配好 ROXYBROWSER_API_BASE / ROXYBROWSER_API_TOKEN（见 .env.example）
-npm run mint-service   # 监听 0.0.0.0:50002
-```
-
-并在 `.env` 配置 `ROXYBROWSER_MINT_API=http://host.docker.internal:50002`，应用便会优先调宿主机铸造服务拿 token。不配置则走后台**手动输入** token（后台「sherlock」页粘贴 `x-arp-session-id`）。
+- 先在 `.env` 配好 `ROXYBROWSER_API_BASE`（Roxy 客户端【API → API配置】里的端口，默认 50000）与 `ROXYBROWSER_API_TOKEN`（API Key）。
+- `./start.sh` 会自动探测宿主机局域网 IP 并注入 `ROXYBROWSER_CDP_HOST`，容器内的 puppeteer 即可直连宿主机 Roxy 的 Chrome CDP 完成铸造（铸造窗口通过 `--remote-debugging-address=0.0.0.0` 监听所有网卡）。
+- 不配 Roxy 则走后台**手动输入** token（后台「sherlock」页粘贴 `x-arp-session-id`），不影响其它功能。
 
 4. **访问管理后台**：
 
-- 地址：`http://127.0.0.1:3000/login`
+- 地址：`http://127.0.0.1:${WEB_PORT:-3000}/login`
 - 账号：`admin`
 - 密码：`admin`
 

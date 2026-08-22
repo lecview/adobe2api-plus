@@ -39,20 +39,6 @@ export type SherlockStatus = {
 
 /** RoxyBrowser API 拉取：铸造全新 sherlockToken（四字段完整），完成后关闭浏览器窗口 */
 export async function pullSherlockFromRoxyBrowser(): Promise<string> {
-  // 优先调用宿主机铸造服务（容器无法访问宿主机 127.0.0.1 绑定的 CDP 端口）：
-  // 宿主机 sherlock-mint-service.js 监听 0.0.0.0:50002，本地执行完整铸造流程
-  const mintApi = process.env.ROXYBROWSER_MINT_API || "";
-  if (mintApi) {
-    const res = await fetch(`${mintApi}/mint`, { method: "POST" });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`铸造服务返回 ${res.status}: ${text.slice(0, 200)}`);
-    }
-    const data = (await res.json()) as { ok?: boolean; token?: string; error?: string };
-    if (!data.ok || !data.token) throw new Error(data.error || "铸造服务未返回 token");
-    return data.token;
-  }
-
   const { default: puppeteer } = await import("puppeteer-core");
   const config = await getRoxyBrowserConfig();
   // 自动获取 workspace + 自动创建窗口（无需手动配置 WORKSPACE_ID / DIR_ID）
@@ -62,7 +48,10 @@ export async function pullSherlockFromRoxyBrowser(): Promise<string> {
     const openRes = await fetch(`${config.apiBase}/browser/open`, {
       method: "POST",
       headers: { token: config.apiToken, "Content-Type": "application/json" },
-      body: JSON.stringify({ workspaceId, dirId, forceOpen: true, headless: true }),
+      // --remote-debugging-address=0.0.0.0：让 Chrome CDP 监听所有网卡，
+      // 容器才能通过宿主机 IP 直连 CDP（默认只绑 127.0.0.1，容器够不到）。
+      // 注意：--remote-debugging-port 是 Roxy 内置参数改不了，但 address 可改。
+      body: JSON.stringify({ workspaceId, dirId, forceOpen: true, headless: true, args: ["--remote-debugging-address=0.0.0.0", "--remote-allow-origins=*"] }),
     });
     const openJson = (await openRes.json()) as { code?: number; data?: { ws?: string } };
     let ws = openJson.data?.ws ?? "";
@@ -227,7 +216,8 @@ type RoxyConfig = { apiBase: string; apiToken: string; cdpHost: string };
 async function getRoxyBrowserConfig(): Promise<RoxyConfig> {
   const apiBase = process.env.ROXYBROWSER_API_BASE?.trim() || "";
   const apiToken = process.env.ROXYBROWSER_API_TOKEN?.trim() || "";
-  // 容器内访问宿主机 RoxyBrowser：CDP ws 地址的 127.0.0.1 替换为该值（如 host.docker.internal）
+  // 容器内访问宿主机 RoxyBrowser：CDP ws 地址的 127.0.0.1 替换为该值（宿主机局域网 IP，如 192.168.50.80）。
+  // 不能用 host.docker.internal：Docker Desktop 网关对其转发宿主机 CDP 端口会返回 500（实测）。
   const cdpHost = process.env.ROXYBROWSER_CDP_HOST?.trim() || "";
 
   const missing: string[] = [];
