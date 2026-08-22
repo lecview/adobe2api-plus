@@ -5,7 +5,7 @@ import { refreshDueProfiles } from "@/lib/adobe/refresh";
 import { refreshSherlockIfDue } from "@/lib/adobe/sherlock";
 import { cleanupMedia } from "@/lib/media-cleanup";
 import { cleanupStaleRemoteMedia } from "@/lib/ssrf";
-import { REQUIRED_MIGRATION, schemaIsReady, type MigrationStatusRow } from "@/lib/schema";
+import { ensureSchema, REQUIRED_MIGRATION, schemaIsReady, type MigrationStatusRow } from "@/lib/schema";
 import { getSystemSettings } from "@/lib/system-settings";
 import { sql } from "drizzle-orm";
 
@@ -33,6 +33,7 @@ async function assertWorkerDatabaseReady() {
 
 async function main() {
   config.validateRuntime();
+  await ensureSchema();
   await assertWorkerDatabaseReady();
   const workerId = config.workerId();
   const once = process.env.WORKER_ONCE === "1";

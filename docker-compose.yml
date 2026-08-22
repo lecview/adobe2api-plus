@@ -17,6 +17,10 @@ x-app-env: &app-env
   ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-admin}
   MEDIA_ROOT: /app/data/generated
   NEXT_TELEMETRY_DISABLED: "1"
+  ROXYBROWSER_API_BASE: ${ROXYBROWSER_API_BASE:-}
+  ROXYBROWSER_API_TOKEN: ${ROXYBROWSER_API_TOKEN:-}
+  ROXYBROWSER_CDP_HOST: ${ROXYBROWSER_CDP_HOST:-}
+  ROXYBROWSER_MINT_API: ${ROXYBROWSER_MINT_API:-}
 
 services:
   # MySQL 8 数据库
@@ -31,8 +35,8 @@ services:
       MYSQL_USER: ${MYSQL_USER:-adobe}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-adobe}
       TZ: ${TZ:-Asia/Shanghai}
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
+    # 数据库不对外暴露端口，仅 compose 内网（web/worker 通过服务名 mysql 访问）
+    # 表结构由应用启动时自动迁移（src/lib/schema.ts 的 ensureSchema），无需 init 脚本。
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:

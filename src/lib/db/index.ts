@@ -11,7 +11,7 @@ const globalForDb = globalThis as unknown as {
 
 let instance: Database | undefined;
 
-function getDb(): Database {
+export function getDb(): Database {
   if (instance) return instance;
 
   // 连接池只在第一次真正访问数据库时创建。这样 vitest、Next build 和
