@@ -1,0 +1,29 @@
+node_modules/
+.next/
+coverage/
+dist/
+.env
+.env.*
+!.env.example
+data/
+*.log
+tsconfig.tsbuildinfo
+.codegraph/
+ext_snapshot2.txt
+sourcecode/
+analysis/
+
+# 数据库备份（含加密凭据，不入库）
+backups/
+
+# 凭据导出文件（含真实 token/cookie，禁止入库）
+accounts*.json
+
+# ── 开源前排除：内部文档 / 调试脚本 / 遗留产物（含生产地址与路径，不入库）──
+/docs/
+/scripts/
+/openspec/
+/prisma/
+/.agents/
+/.claude/
+/check-migration.ts

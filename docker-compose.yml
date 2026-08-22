@@ -1,0 +1,39 @@
+# 固定 project name：手动部署与 GitHub Actions 部署必须使用同一 project，
+# 否则会产生重复容器（如 ac765198deb6_adobe2api-plus-worker-1 与 adobe2api-plus-worker-1 并存）。
+name: adobe2api-plus
+
+services:
+  # 数据库表已由 Drizzle schema 精确映射（src/lib/db/schema.ts），
+  # 生产环境无需重建/迁移表；如需同步 schema 可手动执行 npm run db:push。
+  web:
+    image: adobe2api-plus:local
+    build:
+      context: .
+      args:
+        GIT_SHA: "${GIT_SHA:-dev}"
+    command: npm run start
+    env_file: .env.production
+    ports:
+      - "${ADOBE2API_PLUS_BIND_ADDRESS:-127.0.0.1}:${ADOBE2API_PLUS_PORT:-3001}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - generated-media:/app/data/generated
+    restart: unless-stopped
+
+  worker:
+    image: adobe2api-plus:local
+    build: .
+    command: npm run worker
+    env_file: .env.production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - generated-media:/app/data/generated
+    # 部署重建容器时等待当前任务完成（worker 收到 SIGTERM 后优雅退出），
+    # 避免运行中的生图任务被 docker stop 默认 10s 强杀（表现为 worker_error: terminated）
+    stop_grace_period: 300s
+    restart: unless-stopped
+
+volumes:
+  generated-media:

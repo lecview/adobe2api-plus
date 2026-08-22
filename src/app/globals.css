@@ -1,0 +1,3712 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  /* 与 gpt-team-management 保持同一套中性色和主色。 */
+  /* team console: the shell is white; the document body keeps its warm canvas. */
+  --background: #ffffff;
+  --foreground: #18181b;
+  --muted: #71717a;
+  --muted-soft: #a1a1aa;
+  --border: #e4e4e7;
+  --surface: #ffffff;
+  --surface-soft: #fafafa;
+  --sidebar: #f7f7f8;
+  --sidebar-active: #e4e4e7;
+  --sidebar-active-foreground: #18181b;
+  --primary: #18181b;
+  --primary-dark: #27272a;
+  --primary-foreground: #fafafa;
+  --danger: #dc2626;
+  --ring: rgba(24, 24, 27, 0.18);
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05);
+  --shadow-md: 0 12px 28px rgba(24, 24, 27, 0.1);
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #09090b;
+  --foreground: #fafafa;
+  --muted: #a1a1aa;
+  --muted-soft: #71717a;
+  --border: #27272a;
+  --surface: #09090b;
+  --surface-soft: #18181b;
+  --sidebar: #18181b;
+  --sidebar-active: #27272a;
+  --sidebar-active-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-dark: #e4e4e7;
+  --primary-foreground: #18181b;
+  --danger: #f87171;
+  --ring: rgba(250, 250, 250, 0.22);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 14px 40px rgba(0, 0, 0, 0.42);
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+html {
+  background: #F5F5F0;
+}
+
+body {
+  margin: 0;
+  background: #F5F5F0;
+  color: var(--foreground);
+  font-family: var(--font-ibm-plex-sans), "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Admin shell */
+.admin-shell {
+  display: flex;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.admin-sidebar {
+  display: flex;
+  width: 248px;
+  flex: 0 0 248px;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--sidebar);
+  transition: width 180ms ease, flex-basis 180ms ease;
+}
+
+.admin-sidebar.is-collapsed {
+  width: 64px;
+  flex-basis: 64px;
+}
+
+.admin-brand {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+}
+
+.admin-sidebar.is-collapsed .admin-brand {
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.admin-brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.admin-brand-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.admin-brand-title {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-brand-subtitle {
+  margin-top: 3px;
+  color: var(--muted-soft);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-sidebar-toggle,
+.admin-icon-button {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.admin-sidebar-toggle:hover,
+.admin-icon-button:hover {
+  background: rgba(37, 116, 72, 0.1);
+  color: var(--primary-dark);
+}
+
+.admin-nav-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 10px;
+}
+
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-nav-link {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 11px;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 12px;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.admin-nav-link:hover {
+  background: rgba(37, 116, 72, 0.08);
+  color: var(--foreground);
+}
+
+.admin-nav-link.is-active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-active-foreground);
+}
+
+.admin-sidebar.is-collapsed .admin-nav-link {
+  justify-content: center;
+  padding: 0;
+}
+
+.admin-sidebar.is-collapsed .admin-nav-label,
+.admin-sidebar.is-collapsed .admin-brand-copy {
+  display: none;
+}
+
+.admin-sidebar.is-collapsed .admin-brand {
+  min-height: 64px;
+}
+
+/* The console sidebar is always the light team palette; keep the version
+ * footer on the same colors as the brand subtitle. */
+.admin-version {
+  flex: 0 0 auto;
+  border-top: 1px solid #e4e4e7;
+  padding: 12px 16px;
+  color: #a1a1aa;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-sidebar.is-collapsed .admin-version {
+  padding: 12px 0;
+  text-align: center;
+}
+
+.admin-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-topbar {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0 28px;
+  backdrop-filter: blur(14px);
+}
+
+.admin-topbar-title {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-content {
+  min-width: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 28px;
+}
+
+.admin-mobile-nav {
+  display: none;
+}
+
+.admin-page-heading,
+.admin-section-row,
+.admin-actions,
+.admin-form-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.admin-page-heading {
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.admin-page-heading h1,
+.admin-card h2 {
+  margin: 0;
+}
+
+.admin-page-heading p,
+.admin-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.admin-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  padding: 22px;
+}
+
+.admin-card + .admin-card {
+  margin-top: 18px;
+}
+
+.admin-form-row {
+  margin-top: 20px;
+}
+
+.admin-form-row > .admin-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+  max-width: 680px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.admin-input,
+.admin-textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--foreground);
+  padding: 10px 12px;
+}
+
+.admin-textarea {
+  min-height: 120px;
+  margin-top: 16px;
+  resize: vertical;
+}
+
+.admin-button {
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--foreground);
+  padding: 0 14px;
+  font-weight: 600;
+}
+
+.admin-button:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary-dark);
+}
+
+.admin-button-primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.admin-button-primary:hover:not(:disabled) {
+  background: var(--primary-dark);
+  color: var(--primary-foreground);
+}
+
+.admin-switch {
+  min-width: 76px;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-switch.is-on {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+
+.admin-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 18px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.admin-table th,
+.admin-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 12px 10px;
+  text-align: left;
+}
+
+.admin-table-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.admin-table th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-status {
+  display: inline-flex;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-status-healthy,
+.admin-status-succeeded {
+  background: #e4f4e8;
+  color: #1d7040;
+}
+
+.admin-status-unhealthy,
+.admin-status-failed,
+.admin-status-submission_unknown {
+  background: #fff0f0;
+  color: var(--danger);
+}
+
+.admin-message {
+  color: var(--primary-dark);
+  font-size: 12px;
+}
+
+.admin-message-error {
+  color: var(--danger);
+}
+
+.admin-muted,
+.admin-table small,
+.admin-field small {
+  display: block;
+  color: var(--muted-soft);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.admin-button-small {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.admin-button-icon-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.admin-button-icon-text svg {
+  flex: 0 0 auto;
+}
+
+.admin-button-danger {
+  border-color: rgba(180, 67, 67, 0.35);
+  color: var(--danger);
+}
+
+.account-quick-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.account-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.account-summary-grid .admin-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+}
+
+.account-summary-grid span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.account-summary-grid strong {
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.account-list-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 0;
+}
+
+.account-overview-card {
+  padding: 24px;
+}
+
+.account-overview-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-overview-card .account-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.account-overview-card .account-summary-grid .admin-card {
+  min-height: 82px;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.account-list-card {
+  margin-top: 16px !important;
+  padding: 16px 24px 24px;
+}
+
+.account-search-button {
+  margin-left: auto;
+}
+
+.text-right {
+  text-align: right !important;
+}
+
+.account-search {
+  display: flex;
+  width: min(380px, 100%);
+  height: 36px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #71717a;
+  padding: 0 10px;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
+}
+
+.account-search:focus-within {
+  border-color: #a1a1aa;
+  box-shadow: 0 0 0 3px rgba(24, 24, 27, 0.08);
+}
+
+.account-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: #18181b;
+  font-size: 14px;
+  outline: none;
+}
+
+.account-search input::placeholder {
+  color: #a1a1aa;
+}
+
+.account-filter-select {
+  height: 36px;
+  width: 144px;
+  min-width: 128px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #18181b;
+  font-size: 14px;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
+}
+
+.account-toolbar {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.account-token-table td {
+  vertical-align: top;
+}
+
+.account-token-table code {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.account-token-table .admin-status-disabled,
+.account-token-table .admin-status-invalid,
+.account-token-table .admin-status-exhausted,
+.account-token-table .admin-status-expired,
+.account-token-table .admin-status-revoked {
+  background: #fff0f0;
+  color: var(--danger);
+}
+
+.account-expired {
+  color: var(--danger);
+}
+
+.account-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-modal-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 25, 17, 0.36);
+  padding: 20px;
+}
+
+.admin-modal {
+  width: min(620px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  padding: 22px;
+}
+
+.admin-modal h2 {
+  margin: 0;
+}
+
+.admin-modal > .admin-actions {
+  justify-content: flex-end;
+  margin-top: 22px;
+}
+
+.admin-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+}
+
+.admin-settings-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 0;
+}
+
+.admin-settings-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-settings-grid strong {
+  font-size: 14px;
+}
+
+.admin-settings-card {
+  padding-top: 12px;
+}
+
+.admin-settings-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.admin-settings-tab {
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-settings-tab:hover,
+.admin-settings-tab.is-active {
+  border-color: rgba(37, 116, 72, 0.34);
+  background: var(--sidebar-active);
+  color: var(--sidebar-active-foreground);
+}
+
+.admin-settings-pane {
+  padding-top: 20px;
+}
+
+.admin-settings-subtitle {
+  margin-top: 28px !important;
+}
+
+.admin-one-time-secret {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  border: 1px dashed var(--primary);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  padding: 10px 12px;
+}
+
+.admin-one-time-secret code {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.admin-empty {
+  padding: 20px 0;
+  text-align: center;
+}
+
+.admin-page {
+  width: min(1100px, 100%);
+  margin: 0 auto;
+}
+
+.admin-page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.admin-page-heading h1 {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 28px);
+  letter-spacing: -0.02em;
+}
+
+.admin-page-heading p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.admin-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  padding: 22px;
+}
+
+.admin-card h2,
+.admin-card h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.admin-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.admin-card-link {
+  display: block;
+  height: 100%;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.admin-card-link:hover {
+  border-color: rgba(37, 116, 72, 0.38);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+/* Login */
+.login-page {
+  display: grid;
+  min-height: 100dvh;
+  grid-template-columns: minmax(0, 1.05fr) minmax(420px, 0.95fr);
+  background: var(--background);
+}
+
+.login-intro {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #1f5d3a;
+  color: #f4faf4;
+  padding: clamp(32px, 7vw, 90px);
+}
+
+.login-intro-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.login-intro-brand-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.login-intro-content {
+  max-width: 520px;
+  margin: auto 0;
+  padding: 48px 0;
+}
+
+.login-intro-content h1 {
+  max-width: 540px;
+  margin: 0;
+  font-size: clamp(34px, 5vw, 62px);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  line-height: 1.08;
+}
+
+.login-intro-content p {
+  max-width: 430px;
+  margin: 24px 0 0;
+  color: rgba(244, 250, 244, 0.72);
+  font-size: 16px;
+}
+
+.login-intro-footer {
+  color: rgba(244, 250, 244, 0.55);
+  font-size: 12px;
+}
+
+.login-panel {
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  padding: 32px;
+}
+
+.login-card {
+  width: min(390px, 100%);
+}
+
+.login-card-header {
+  margin-bottom: 30px;
+}
+
+.login-card-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 20px;
+  place-items: center;
+  border-radius: 13px;
+  background: #e4f1e7;
+  color: var(--primary-dark);
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 25px;
+  letter-spacing: -0.03em;
+}
+
+.login-card-header p {
+  margin: 7px 0 0;
+  color: var(--muted);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.login-field label {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.login-input {
+  width: 100%;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--foreground);
+  padding: 0 13px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.login-input::placeholder {
+  color: var(--muted-soft);
+}
+
+.login-input:hover {
+  border-color: #b9c5bb;
+}
+
+.login-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--ring);
+  outline: 0;
+}
+
+.login-submit {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 650;
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.login-submit:hover:not(:disabled) {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+}
+
+.login-submit:disabled {
+  opacity: 0.65;
+}
+
+.login-error {
+  margin: 0;
+  border-radius: 9px;
+  background: #fff0f0;
+  color: var(--danger);
+  padding: 9px 11px;
+  font-size: 12px;
+}
+
+.login-hint {
+  margin: 20px 0 0;
+  color: var(--muted-soft);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 860px) {
+  .admin-sidebar {
+    display: none;
+  }
+
+  .admin-topbar {
+    min-height: 58px;
+    padding: 0 16px;
+  }
+
+  .admin-content {
+    padding: 20px 16px;
+  }
+
+  .admin-mobile-nav {
+    display: flex;
+    gap: 5px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    padding: 8px 12px;
+  }
+
+  .admin-mobile-nav .admin-nav-link {
+    min-width: max-content;
+    min-height: 38px;
+  }
+
+  .admin-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .account-quick-actions,
+  .account-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .login-page {
+    display: block;
+  }
+
+  .login-intro {
+    min-height: 230px;
+    padding: 28px 24px;
+  }
+
+  .login-intro-content {
+    margin: 0;
+    padding: 28px 0 8px;
+  }
+
+  .login-intro-content h1 {
+    font-size: 34px;
+  }
+
+  .login-intro-content p,
+  .login-intro-footer {
+    display: none;
+  }
+
+  .login-panel {
+    min-height: calc(100dvh - 230px);
+    padding: 40px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Team console visual parity
+ * -------------------------------------------------------------------------
+ * The admin pages intentionally use the same geometry as
+ * gpt-team-management: 240px sidebar, 56px top bar, 24px content gutter,
+ * neutral zinc palette, rounded-2xl cards and black primary actions.
+ */
+.admin-shell {
+  background: #f5f5f0;
+}
+
+.admin-sidebar {
+  width: 240px;
+  flex-basis: 240px;
+  background: #f4f4f5;
+  border-color: #e4e4e7;
+}
+
+.admin-sidebar.is-collapsed {
+  width: 56px;
+  flex-basis: 56px;
+}
+
+.admin-brand {
+  min-height: 56px;
+  height: 56px;
+  gap: 8px;
+  padding: 0 16px;
+  border-color: #e4e4e7;
+}
+
+.admin-sidebar.is-collapsed .admin-brand {
+  min-height: 56px;
+  height: 56px;
+  padding: 0;
+}
+
+.admin-brand-mark {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.admin-brand-title {
+  color: #18181b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admin-brand-subtitle {
+  margin-top: 2px;
+  color: #a1a1aa;
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.admin-sidebar-toggle,
+.admin-icon-button {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+  border-radius: 6px;
+  color: #71717a;
+}
+
+.admin-sidebar-toggle:hover,
+.admin-icon-button:hover {
+  background: #e4e4e7;
+  color: #18181b;
+}
+
+.admin-nav-scroll {
+  padding: 12px 8px;
+}
+
+.admin-nav {
+  gap: 2px;
+}
+
+.admin-nav-link {
+  min-height: 36px;
+  gap: 12px;
+  border-radius: 8px;
+  color: #71717a;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0 12px;
+}
+
+.admin-nav-link:hover {
+  background: #ececef;
+  color: #18181b;
+}
+
+.admin-nav-link.is-active {
+  background: #e4e4e7;
+  color: #18181b;
+}
+
+.admin-main {
+  background: #f5f5f0;
+}
+
+.admin-topbar {
+  min-height: 56px;
+  height: 56px;
+  background: #ffffff;
+  border-color: #e4e4e7;
+  padding: 0 24px;
+  backdrop-filter: none;
+}
+
+.admin-topbar-title {
+  color: #71717a;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.admin-content {
+  background: #f5f5f0;
+  padding: 24px;
+}
+
+.admin-page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.admin-page-heading {
+  min-height: 40px;
+  margin-bottom: 20px;
+  gap: 16px;
+}
+
+.admin-page-heading h1 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.admin-page-heading p {
+  margin-top: 2px;
+  color: #71717a;
+  font-size: 14px;
+}
+
+.admin-card,
+.admin-card-grid .admin-card {
+  border-color: #e4e4e7;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.05);
+  padding: 24px;
+}
+
+.admin-card + .admin-card {
+  margin-top: 16px;
+}
+
+.admin-card h2,
+.admin-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.admin-card p,
+.admin-page-heading p {
+  color: #71717a;
+}
+
+.admin-button {
+  min-height: 36px;
+  border-color: #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #18181b;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.05);
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.admin-button:hover:not(:disabled) {
+  border-color: #d4d4d8;
+  background: #fafafa;
+  color: #18181b;
+}
+
+.admin-button-primary {
+  border-color: #18181b;
+  background: #18181b;
+  color: #fafafa;
+}
+
+.admin-button-primary:hover:not(:disabled) {
+  border-color: #27272a;
+  background: #27272a;
+  color: #ffffff;
+}
+
+.admin-button-danger {
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.admin-button-danger:hover:not(:disabled) {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.admin-button-small {
+  min-height: 32px;
+  border-radius: 7px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.admin-input,
+.admin-textarea,
+select.admin-input {
+  border-color: #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #18181b;
+  padding: 0 12px;
+  font-size: 14px;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
+}
+
+.admin-input {
+  height: 36px;
+}
+
+.admin-textarea {
+  min-height: 120px;
+  padding: 10px 12px;
+}
+
+.admin-input:focus,
+.admin-textarea:focus {
+  border-color: #a1a1aa;
+  box-shadow: 0 0 0 3px rgba(24, 24, 27, 0.08);
+  outline: none;
+}
+
+.admin-field {
+  color: #52525b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.admin-table-wrap {
+  margin-top: 16px;
+}
+
+.admin-table {
+  color: #18181b;
+  font-size: 14px;
+}
+
+.admin-table th,
+.admin-table td {
+  border-color: #e4e4e7;
+  padding: 12px 10px;
+}
+
+.admin-table th {
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.admin-table tbody tr:hover {
+  background: #fafafa;
+}
+
+.admin-table-actions {
+  align-items: center;
+  gap: 2px;
+}
+
+.admin-table-actions .admin-icon-button {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+  border-radius: 6px;
+  color: #18181b;
+}
+
+.admin-table-actions .admin-icon-button:hover:not(:disabled) {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.admin-table-actions .admin-icon-button:disabled {
+  color: #d4d4d8;
+}
+
+.admin-status {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #f4f4f5;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.admin-status-active,
+.admin-status-healthy,
+.admin-status-succeeded {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.admin-status-pending,
+.admin-status-submitted {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.admin-status-disabled,
+.admin-status-invalid,
+.admin-status-exhausted,
+.admin-status-expired,
+.admin-status-revoked,
+.admin-status-unhealthy,
+.admin-status-failed,
+.admin-status-submission_unknown {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.admin-switch {
+  min-width: 64px;
+  min-height: 30px;
+  border-radius: 7px;
+  background: #f4f4f5;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.admin-switch.is-on {
+  border-color: #18181b;
+  background: #18181b;
+  color: #fafafa;
+}
+
+.admin-message {
+  color: #52525b;
+  font-size: 13px;
+}
+
+.admin-message-error {
+  color: #dc2626;
+}
+
+.admin-muted,
+.admin-table small,
+.admin-field small {
+  color: #a1a1aa;
+  font-size: 12px;
+}
+
+.account-summary-grid {
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.account-summary-grid .admin-card {
+  gap: 8px;
+  padding: 18px 20px;
+}
+
+.account-summary-grid span {
+  color: #71717a;
+  font-size: 13px;
+}
+
+.account-summary-grid strong {
+  color: #18181b;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.account-pagination {
+  margin-top: 16px;
+  color: #71717a;
+}
+
+.admin-modal-backdrop {
+  background: rgba(9, 9, 11, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.admin-modal {
+  border-color: #e4e4e7;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 20px 60px rgba(24, 24, 27, 0.18);
+  padding: 24px;
+}
+
+.admin-settings-card {
+  padding: 16px 24px 24px;
+}
+
+.admin-settings-tabs {
+  display: inline-flex;
+  height: 36px;
+  min-width: max-content;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 0;
+  border: 0;
+  border-radius: 8px;
+  background: #f4f4f5;
+  padding: 4px;
+  color: #71717a;
+}
+
+.admin-settings-tabs-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+
+.admin-settings-tab {
+  display: inline-flex;
+  height: 28px;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #71717a;
+  padding: 4px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  transition: all 150ms ease;
+}
+
+.admin-settings-tab:hover {
+  background: #e4e4e7;
+  color: #18181b;
+}
+
+.admin-settings-tab.is-active {
+  border-color: #e4e4e7;
+  background: #ffffff;
+  color: #18181b;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.08);
+}
+
+.admin-settings-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #18181b, 0 0 0 4px #ffffff;
+}
+
+.admin-settings-pane {
+  padding-top: 24px;
+}
+
+.admin-settings-pane h2 {
+  font-size: 16px;
+}
+
+.admin-settings-actions {
+  justify-content: flex-end;
+}
+
+.admin-settings-select {
+  width: 100%;
+  height: 36px;
+  min-height: 36px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #18181b;
+  padding: 0 12px;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
+  outline: none;
+}
+
+.admin-settings-select:focus,
+.admin-settings-select:focus-visible {
+  border-color: #e4e4e7;
+  box-shadow: 0 0 0 1px #18181b;
+  outline: none;
+}
+
+.admin-settings-select:hover:not(:focus) {
+  border-color: #e4e4e7;
+}
+
+.admin-settings-select-content {
+  z-index: 60;
+  min-width: var(--radix-select-trigger-width);
+  overflow: hidden;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #18181b;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(24, 24, 27, 0.12);
+}
+
+.admin-settings-select-content [role="option"] {
+  min-height: 32px;
+  border-radius: 6px;
+  padding: 6px 32px 6px 10px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.admin-settings-select-content [role="option"][data-highlighted] {
+  background: #f4f4f5;
+  color: #18181b;
+  outline: none;
+}
+
+.admin-settings-loading {
+  display: flex;
+  min-height: 320px;
+  align-items: center;
+  justify-content: center;
+  color: #a1a1aa;
+}
+
+.admin-settings-loading-icon,
+.admin-button-spinner,
+.account-action-spinner,
+.login-spinner {
+  animation: admin-settings-spin 0.9s linear infinite;
+}
+
+.admin-button-saving {
+  min-width: 104px;
+}
+
+.admin-button-saving:disabled {
+  border-color: #3f3f46;
+  background: #3f3f46;
+  color: #f4f4f5;
+  opacity: 1;
+}
+
+@keyframes admin-settings-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.admin-setting-toggle {
+  display: flex;
+  width: min(680px, 100%);
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  color: #18181b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.admin-setting-switch {
+  display: inline-flex;
+  width: 32px;
+  height: 18px;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: #e4e4e7;
+  padding: 0;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.08);
+  cursor: pointer;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.admin-setting-switch span {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.18);
+  transform: translateX(0);
+  transition: transform 150ms ease;
+}
+
+.admin-setting-switch.is-on {
+  background: #18181b;
+}
+
+.admin-setting-switch.is-on span {
+  transform: translateX(14px);
+}
+
+.admin-setting-switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(24, 24, 27, 0.2);
+}
+
+.admin-one-time-secret {
+  border-color: #a1a1aa;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.admin-empty {
+  color: #71717a;
+}
+
+.admin-card-link:hover {
+  border-color: #a1a1aa;
+  box-shadow: 0 8px 24px rgba(24, 24, 27, 0.1);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 1023px) {
+  .admin-sidebar {
+    display: none;
+  }
+
+  .admin-topbar {
+    min-height: 56px;
+    height: 56px;
+    padding: 0 16px;
+  }
+
+  .admin-content {
+    padding: 20px 16px;
+  }
+
+  .account-list-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-search,
+  .account-filter-select {
+    width: 100%;
+  }
+
+  .account-overview-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .account-overview-card .account-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-search-button {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+/* Proxy pool: use the same spacing, card, button and table language as the
+ * team console while keeping the Adobe-specific ordered-node controls. */
+.proxy-pool-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 顶部操作卡片（总开关 + 新增，参考 adobe 账户管理） */
+.proxy-pool-overview-card {
+  padding: 24px;
+}
+
+.proxy-pool-overview-card .account-overview-actions {
+  flex-wrap: wrap;
+}
+
+.proxy-pool-list-card {
+  min-width: 0;
+}
+
+/* 列表上方搜索工具条 */
+.proxy-pool-list-toolbar {
+  margin-bottom: 14px;
+}
+
+.proxy-pool-list-toolbar .account-search {
+  max-width: 320px;
+}
+
+/* 列表表格微调 */
+.proxy-pool-table {
+  min-width: 640px;
+}
+
+.proxy-pool-protocol {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.proxy-pool-address {
+  color: #18181b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* 认证列：用户名 + 密码（可显隐）+ 复制 URL */
+.proxy-pool-auth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.proxy-pool-auth-user {
+  color: #18181b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.proxy-pool-auth-pass {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--muted-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.proxy-pool-auth-eye,
+.proxy-pool-copy {
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 3px;
+  cursor: pointer;
+}
+
+.proxy-pool-auth-eye:hover,
+.proxy-pool-copy:hover {
+  background: rgba(37, 116, 72, 0.1);
+  color: var(--primary-dark);
+}
+
+/* 状态列：启用徽标 + 测试结果 */
+.proxy-pool-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 160px; /* 固定列宽，测试结果插入时不挤压其它列 */
+}
+
+.proxy-pool-latency {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 86px; /* 未测/测试中/结果三种状态共用同一宽度，行高不跳动 */
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.proxy-pool-latency.is-ok {
+  color: #1d7040;
+}
+
+.proxy-pool-latency.is-bad {
+  color: var(--danger);
+}
+
+.proxy-pool-latency.is-testing,
+.proxy-pool-latency.is-idle {
+  color: var(--muted-soft);
+}
+
+.proxy-pool-table-empty,
+.proxy-pool-loading {
+  min-height: 160px;
+  padding: 48px 16px !important;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* 新增/编辑弹窗 */
+.proxy-pool-add-dialog,
+.proxy-pool-edit-dialog {
+  max-width: 640px;
+  gap: 20px;
+  border-color: #e4e4e7;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 24px;
+  color: #18181b;
+}
+
+.proxy-pool-add-dialog [data-slot="dialog-title"],
+.proxy-pool-edit-dialog [data-slot="dialog-title"] {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.proxy-pool-add-dialog [data-slot="dialog-description"],
+.proxy-pool-edit-dialog [data-slot="dialog-description"] {
+  color: #71717a;
+}
+
+.proxy-pool-dialog-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.proxy-pool-add-textarea {
+  min-height: 240px;
+  resize: vertical;
+}
+
+.proxy-pool-edit-fields .admin-switch {
+  align-self: flex-start;
+}
+
+@media (max-width: 640px) {
+  .proxy-pool-overview-card .account-overview-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .proxy-pool-overview-card .account-search {
+    max-width: none;
+    margin-right: 0;
+  }
+
+  .proxy-pool-add-dialog,
+  .proxy-pool-edit-dialog {
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    padding: 20px;
+  }
+
+  .proxy-pool-add-dialog footer button,
+  .proxy-pool-edit-dialog footer button {
+    width: 100%;
+  }
+}
+
+/* Team-style centered login screen. */
+.login-page {
+  display: flex;
+  min-height: 100dvh;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f0;
+  padding: 24px;
+}
+
+.login-card {
+  width: min(384px, 100%);
+}
+
+.login-card-header {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.login-card-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.login-card h1 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.login-card-header p {
+  margin-top: 4px;
+  color: #71717a;
+  font-size: 14px;
+}
+
+.login-form {
+  gap: 16px;
+}
+
+.login-field {
+  gap: 6px;
+}
+
+.login-field label {
+  color: #18181b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.login-input {
+  height: 36px;
+  border-color: #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #18181b;
+  padding: 0 12px;
+  font-size: 14px;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
+}
+
+.login-input:hover {
+  border-color: #d4d4d8;
+}
+
+.login-input:focus {
+  border-color: #a1a1aa;
+  box-shadow: 0 0 0 3px rgba(24, 24, 27, 0.08);
+}
+
+.login-submit {
+  min-height: 36px;
+  margin-top: 4px;
+  border-radius: 8px;
+  background: #18181b;
+  color: #fafafa;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.login-submit:hover:not(:disabled) {
+  background: #27272a;
+  transform: none;
+}
+
+.login-error {
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.login-hint {
+  margin-top: 16px;
+  color: #a1a1aa;
+}
+
+/* Radix/shadcn primitives copied from the team console use these semantic tokens. */
+@theme inline {
+  --color-background: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--surface-soft);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--surface-soft);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--sidebar-active);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--ring);
+}
+
+/* The team console uses a warm gray canvas and white cards on every admin route. */
+html,
+body {
+  background: #F5F5F0;
+}
+
+.admin-shell {
+  background: #F5F5F0;
+}
+
+.admin-main,
+.admin-content {
+  background: #F5F5F0;
+}
+
+.admin-sidebar,
+.admin-topbar {
+  background: #FFFFFF;
+}
+
+.admin-sidebar {
+  background: #F7F7F8;
+}
+
+.account-overview-card .account-summary-grid {
+  align-items: stretch;
+}
+
+.account-overview-card .account-summary-grid .admin-card,
+.account-overview-card .account-summary-grid .admin-card + .admin-card {
+  min-height: 82px;
+  margin-top: 0 !important;
+}
+
+.account-list-filters {
+  margin-top: 0;
+}
+
+.account-filter-select {
+  height: 36px;
+  width: 144px;
+  min-width: 128px;
+  padding: 0 12px;
+  background: #FFFFFF;
+}
+
+/* Radix Select already supplies the team-style 1px focus ring. The global
+ * button focus rule must not add a second 3px outline around the trigger. */
+.account-list-card .account-filter-select:focus,
+.account-list-card .account-filter-select:focus-visible {
+  outline: none !important;
+  border-color: #e4e4e7;
+  box-shadow: 0 0 0 1px rgba(24, 24, 27, 0.18);
+}
+
+/* Match the team account list shell: the filter row and pagination are full-bleed
+ * inside the card, while only the table itself is horizontally scrollable. */
+.account-list-card {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.account-list-card .account-list-filters {
+  min-width: 0;
+  min-height: 68px;
+  margin: 0;
+  padding: 16px;
+  border-bottom: 1px solid #e4e4e7;
+  gap: 12px;
+}
+
+.account-list-card > .relative {
+  width: 100%;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.account-list-card .account-search {
+  width: 380px;
+  max-width: 380px;
+  flex: 1 1 380px;
+}
+
+.account-list-card .account-filter-select {
+  width: 160px;
+  min-width: 160px;
+  flex: 0 0 160px;
+}
+
+.account-list-card .account-search-button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.account-list-card .admin-table-wrap {
+  min-width: 0;
+  margin-top: 0;
+}
+
+.account-list-card .account-token-table {
+  min-width: 1120px;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.account-list-card .account-token-table th {
+  height: 40px;
+  padding: 0 12px;
+  color: #71717a;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.account-list-card .account-token-table td {
+  padding: 12px;
+  text-align: center;
+}
+
+.account-list-card .account-token-table th {
+  text-align: center;
+}
+
+.account-list-card .account-token-table .text-right {
+  text-align: center !important;
+}
+
+.account-list-card .account-token-table .admin-table-actions {
+  width: 100%;
+  justify-content: center;
+}
+
+.account-list-card .admin-table-actions .admin-icon-button-danger {
+  color: #dc2626;
+}
+
+.account-list-card .admin-table-actions .admin-icon-button-danger:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.account-table-checkbox-head,
+.account-table-checkbox-cell {
+  width: 40px;
+  padding-right: 0 !important;
+}
+
+.account-table-empty,
+.account-table-loading {
+  padding: 40px 16px !important;
+  text-align: center;
+}
+
+.account-token-table td {
+  vertical-align: middle;
+}
+
+.account-list-card .account-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 58px;
+  margin: 0;
+  padding: 12px 16px;
+  border-top: 1px solid #e4e4e7;
+}
+
+.account-pagination-info,
+.account-pagination-size {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-pagination-size {
+  gap: 6px;
+  color: #71717a;
+  white-space: nowrap;
+}
+
+.account-page-size-select {
+  width: 68px;
+  min-width: 68px;
+  height: 32px;
+  min-height: 32px;
+  border-color: #e4e4e7;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #18181b;
+  padding: 0 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.account-page-size-select:focus,
+.account-page-size-select:focus-visible {
+  border-color: #e4e4e7;
+  box-shadow: 0 0 0 1px #18181b;
+  outline: none;
+}
+
+.account-pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.account-pagination-button {
+  display: inline-grid;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  place-items: center;
+  padding: 0;
+}
+
+@media (max-width: 640px) {
+  .account-list-card .account-pagination {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .account-pagination-info {
+    flex-wrap: wrap;
+  }
+
+  .account-pagination-actions {
+    margin-left: auto;
+  }
+}
+
+/* 批量删除按钮：只在选中账号时出现在筛选行最左侧。 */
+.account-batch-delete-button {
+  flex-shrink: 0;
+}
+
+/* 批量刷新积分弹窗：进度条 + 统计 + 可滚动任务列表。 */
+.account-refresh-dialog {
+  max-width: 560px;
+}
+
+.account-refresh-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: #e4e4e7;
+}
+
+.account-refresh-progress-bar {
+  height: 100%;
+  border-radius: 9999px;
+  background: #2563eb;
+  transition: width 0.2s ease;
+}
+
+.account-refresh-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: #71717a;
+}
+
+.account-refresh-stats strong {
+  color: #18181b;
+}
+
+/* 批量导入弹窗：文件选择 + 就绪信息 + 实时批次统计。 */
+.account-import-file {
+  display: flex;
+  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px dashed #d4d4d8;
+  border-radius: 10px;
+  background: #fafafa;
+  color: #71717a;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.account-import-file:hover {
+  border-color: #2563eb;
+  background: #f4f7ff;
+}
+
+.account-import-file input {
+  display: none;
+}
+
+.account-import-ready p {
+  margin: 0;
+  color: #71717a;
+  font-size: 13px;
+}
+
+.account-import-ready p strong {
+  color: #18181b;
+  font-size: 16px;
+}
+
+.account-import-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: #71717a;
+}
+
+.account-import-stats strong {
+  color: #18181b;
+}
+
+.account-import-done {
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #047857;
+  padding: 8px 12px;
+}
+
+.account-refresh-tasks {
+  display: flex;
+  max-height: 300px;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.account-refresh-task {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.account-refresh-task-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #18181b;
+}
+
+.account-refresh-task-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.account-refresh-task-running {
+  background: #eff6ff;
+}
+
+.account-refresh-task-running .account-refresh-task-status {
+  color: #2563eb;
+}
+
+.account-refresh-task-ok {
+  background: #f0fdf4;
+}
+
+.account-refresh-task-ok .account-refresh-task-status {
+  color: #16a34a;
+}
+
+.account-refresh-task-failed,
+.account-refresh-task-unauthorized {
+  background: #fef2f2;
+}
+
+.account-refresh-task-failed .account-refresh-task-status,
+.account-refresh-task-unauthorized .account-refresh-task-status {
+  color: #dc2626;
+}
+
+.account-refresh-task-pending .account-refresh-task-status {
+  color: #a1a1aa;
+}
+
+.account-refresh-dialog-footer {
+  margin-top: 8px;
+}
+
+/* Proxy rows use the same list shell as Adobe 管理. The proxy-specific
+ * columns keep their own content, but card geometry, filters, alignment and
+ * action placement stay identical between the two admin lists. */
+.proxy-pool-list-card {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.proxy-pool-list-card .proxy-pool-list-toolbar {
+  min-width: 0;
+  min-height: 68px;
+  margin: 0;
+  padding: 16px;
+  border-bottom: 1px solid #e4e4e7;
+  gap: 12px;
+}
+
+.proxy-pool-list-card .account-search {
+  width: 380px;
+  max-width: 380px;
+  flex: 1 1 380px;
+}
+
+.proxy-pool-list-card .account-filter-select {
+  width: 160px;
+  min-width: 160px;
+  flex: 0 0 160px;
+}
+
+.proxy-pool-list-card > .relative {
+  width: 100%;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.proxy-pool-list-card .admin-table-wrap {
+  min-width: 0;
+  margin-top: 0;
+}
+
+.proxy-pool-list-card .proxy-pool-table {
+  min-width: 1120px;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.proxy-pool-list-card .proxy-pool-table th {
+  height: 40px;
+  padding: 0 12px;
+  color: #71717a;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.proxy-pool-list-card .proxy-pool-table td {
+  padding: 12px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.proxy-pool-list-card .proxy-pool-table .text-right {
+  text-align: center !important;
+}
+
+.proxy-pool-list-card .proxy-pool-auth,
+.proxy-pool-list-card .proxy-pool-status {
+  justify-content: center;
+}
+
+/* An idle row only shows a dash. Do not reserve the full result width in
+ * that state, otherwise the visible status pair looks left-shifted. */
+.proxy-pool-list-card .proxy-pool-latency.is-idle {
+  min-width: 0;
+  justify-content: center;
+}
+
+.proxy-pool-list-card .proxy-pool-table .admin-table-actions {
+  width: 100%;
+  justify-content: center;
+}
+
+.proxy-pool-list-card .admin-table-actions .admin-icon-button-danger {
+  color: #dc2626;
+}
+
+.proxy-pool-list-card .admin-table-actions .admin-icon-button-danger:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.account-add-dialog {
+  max-width: 640px;
+  gap: 20px;
+  border-color: #e4e4e7;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 24px;
+  color: #18181b;
+}
+
+.account-add-dialog [data-slot="dialog-title"] {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.account-add-dialog [data-slot="dialog-description"] {
+  color: #71717a;
+}
+
+.account-add-dialog-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.account-add-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #3f3f46;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.account-add-field small {
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.account-add-textarea {
+  min-height: 300px;
+  resize: vertical;
+  border-color: #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #18181b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
+}
+
+.account-add-textarea:focus-visible {
+  border-color: #a1a1aa;
+  box-shadow: 0 0 0 3px rgba(24, 24, 27, 0.08);
+  outline: none;
+}
+
+.account-add-dialog-footer {
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .account-add-dialog {
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    padding: 20px;
+  }
+
+  .account-add-dialog-footer button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 1023px) {
+  .account-filter-select {
+    width: 100%;
+  }
+
+  .account-list-card .account-list-filters,
+  .proxy-pool-list-card .proxy-pool-list-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-list-card .account-search,
+  .account-list-card .account-filter-select,
+  .proxy-pool-list-card .account-search,
+  .proxy-pool-list-card .account-filter-select,
+  .account-list-card .account-search-button {
+    width: 100%;
+    max-width: none;
+    flex: 1 1 auto;
+  }
+
+  .account-list-card .account-search-button {
+    margin-left: 0;
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Team console input/select focus parity
+ * -------------------------------------------------------------------------
+ * Keep the resting border at the team token (#e4e4e7). Inputs use the
+ * shadcn keyboard-only 1px ring; Radix Select uses the same 1px ring for
+ * every focus state. There is no extra browser 3px outline.
+ */
+:root {
+  --ring: #18181b;
+}
+
+:root[data-theme="dark"] {
+  --ring: #d4d4d8;
+}
+
+.admin-input,
+.admin-textarea,
+.login-input,
+select.admin-input,
+.account-filter-select {
+  border-color: #e4e4e7;
+  background: #ffffff;
+  outline: none;
+}
+
+.admin-input:focus,
+.admin-textarea:focus,
+.login-input:focus {
+  border-color: #e4e4e7;
+  box-shadow: none;
+  outline: none;
+}
+
+.admin-input:focus-visible,
+.admin-textarea:focus-visible,
+.login-input:focus-visible {
+  border-color: #e4e4e7;
+  box-shadow: 0 0 0 1px #18181b;
+  outline: none;
+}
+
+select.admin-input:focus,
+.account-filter-select:focus,
+.account-filter-select:focus-visible {
+  border-color: #e4e4e7;
+  box-shadow: 0 0 0 1px #18181b;
+  outline: none;
+}
+
+/* Team's Input has no hover color transition; hovering an unfocused field
+ * must not turn its resting border gray or black. */
+.admin-input:hover:not(:focus),
+.admin-textarea:hover:not(:focus),
+.login-input:hover:not(:focus),
+.account-filter-select:hover:not(:focus) {
+  border-color: #e4e4e7;
+}
+
+.account-search:focus-within {
+  border-color: #e4e4e7;
+  box-shadow: none;
+}
+
+.account-list-card .account-filter-select:focus,
+.account-list-card .account-filter-select:focus-visible {
+  border-color: #e4e4e7 !important;
+  box-shadow: 0 0 0 1px #18181b !important;
+  outline: none !important;
+}
+
+.account-add-textarea:focus-visible {
+  border-color: #e4e4e7;
+  box-shadow: 0 0 0 1px #18181b;
+  outline: none;
+}
+
+/* Dialog content is rendered in a body-level portal, so the shell-wide
+ * focus reset does not reach the edit form's shared Input components. */
+.proxy-pool-edit-dialog input:focus-visible {
+  border-color: #e4e4e7;
+  box-shadow: 0 0 0 1px #18181b;
+  outline: none;
+  outline-offset: 0;
+}
+
+/* The old shell-wide rule added a 3px outline that the team console does
+ * not have. Component utilities above provide the intended ring instead. */
+.admin-shell button:focus-visible,
+.admin-shell a:focus-visible,
+.admin-shell input:focus-visible,
+.admin-shell select:focus-visible,
+.admin-shell textarea:focus-visible {
+  outline: none;
+}
+/* Request log / task visibility */
+.jobs-page {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.jobs-table {
+  min-width: 1120px;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.jobs-time-cell,
+.jobs-account-cell,
+.jobs-model-cell {
+  white-space: nowrap;
+}
+
+.jobs-prompt-cell {
+  min-width: 0;
+}
+
+.jobs-prompt-cell-scroll {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  color: #3f3f46;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.jobs-time-cell {
+  min-width: 126px;
+}
+
+.jobs-time-cell span,
+.jobs-time-cell small {
+  display: block;
+}
+
+.jobs-time-cell small,
+.jobs-stage-text,
+.jobs-error-text,
+.jobs-attempt small {
+  color: var(--muted-soft);
+  font-size: 11px;
+}
+
+.jobs-stage-text,
+.jobs-error-text {
+  display: block;
+  margin-top: 4px;
+}
+
+.jobs-error-text {
+  color: var(--danger);
+}
+
+.jobs-nowrap {
+  white-space: nowrap;
+}
+
+.jobs-progress-cell {
+  min-width: 92px;
+}
+
+.jobs-progress-cell small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.jobs-progress-track {
+  width: 72px;
+  height: 5px;
+  margin: 0 auto 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.jobs-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--foreground);
+  transition: width 200ms ease;
+}
+
+.jobs-refresh-spin,
+.jobs-spinner {
+  animation: jobs-spin 800ms linear infinite;
+}
+
+@keyframes jobs-spin {
+  to { transform: rotate(360deg); }
+}
+
+.jobs-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 160px;
+  color: var(--muted);
+}
+
+.jobs-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--foreground);
+  border-radius: 50%;
+}
+
+.jobs-table-empty {
+  min-height: 160px;
+  padding: 40px 16px !important;
+  color: #a1a1aa;
+  text-align: center !important;
+}
+
+.jobs-detail-dialog {
+  width: min(860px, calc(100vw - 32px));
+  max-width: min(860px, calc(100vw - 32px));
+  max-height: min(760px, calc(100dvh - 40px));
+  gap: 0;
+  overflow: hidden;
+  border-color: #e4e4e7;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 0;
+  color: #18181b;
+}
+
+.jobs-detail-dialog > button {
+  top: 20px;
+  right: 20px;
+  z-index: 2;
+  border-radius: 6px;
+  color: #71717a;
+}
+
+.jobs-detail-dialog > button:hover {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.jobs-detail-content {
+  max-height: min(760px, calc(100dvh - 40px));
+  overflow-y: auto;
+  padding: 28px;
+}
+
+.jobs-detail-header {
+  margin-bottom: 22px;
+  padding-right: 32px;
+}
+
+.jobs-detail-header [data-slot="dialog-title"] {
+  color: #18181b;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.jobs-detail-id {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #a1a1aa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.jobs-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin-bottom: 24px;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.jobs-detail-field {
+  min-width: 0;
+  min-height: 72px;
+  padding: 13px 15px;
+  border-right: 1px solid #e4e4e7;
+  border-bottom: 1px solid #e4e4e7;
+}
+
+.jobs-detail-field:nth-child(4n) {
+  border-right: 0;
+}
+
+.jobs-detail-field:nth-last-child(-n + 4) {
+  border-bottom: 0;
+}
+
+.jobs-detail-field > span:first-child {
+  display: block;
+  margin-bottom: 6px;
+  color: #71717a;
+  font-size: 12px;
+}
+
+.jobs-detail-field strong {
+  display: block;
+  min-width: 0;
+  color: #18181b;
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.jobs-detail-code,
+.jobs-detail-break {
+  overflow-wrap: anywhere;
+}
+
+.jobs-detail-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px !important;
+}
+
+.jobs-detail-section {
+  margin-top: 24px;
+  border-top: 1px solid #e4e4e7;
+  padding-top: 20px;
+}
+
+.jobs-detail-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.jobs-detail-section-header > div {
+  min-width: 0;
+}
+
+.jobs-detail-section-header h3 {
+  margin: 0;
+  color: #18181b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.jobs-detail-section-header span {
+  display: block;
+  margin-top: 3px;
+  color: #a1a1aa;
+  font-size: 12px;
+}
+
+.jobs-detail-section-header > b {
+  display: inline-flex;
+  min-width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #f4f4f5;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.jobs-prompt-box {
+  min-height: 88px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fafafa;
+  padding: 14px 16px;
+  color: #27272a;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.jobs-detail-error {
+  display: flex;
+  margin-top: 24px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  padding: 13px 15px;
+}
+
+.jobs-detail-error > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jobs-detail-error strong {
+  color: #b91c1c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.jobs-detail-error span {
+  color: #7f1d1d;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.jobs-attempt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.jobs-attempt {
+  min-width: 0;
+  padding: 13px 15px;
+  border-bottom: 1px solid #e4e4e7;
+  background: #ffffff;
+}
+
+.jobs-attempt:last-child {
+  border-bottom: 0;
+}
+
+.jobs-attempt-main,
+.jobs-attempt-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.jobs-attempt-main strong {
+  color: #27272a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.jobs-attempt-main em {
+  color: #a1a1aa;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.jobs-attempt-status {
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.jobs-attempt-status-succeeded {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.jobs-attempt-status-failed {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.jobs-attempt-status-running {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.jobs-attempt-meta {
+  margin-top: 6px;
+  color: #71717a;
+  font-size: 12px;
+}
+
+.jobs-attempt-meta span + span::before {
+  content: "·";
+  margin-right: 8px;
+  color: #d4d4d8;
+}
+
+.jobs-attempt-meta time {
+  margin-left: auto;
+  color: #a1a1aa;
+  font-size: 11px;
+}
+
+.jobs-attempt > small {
+  display: block;
+  margin-top: 7px;
+  color: #71717a;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.jobs-attempt > .jobs-attempt-error {
+  color: #dc2626;
+}
+
+.jobs-event-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 4px;
+}
+
+.jobs-event-list::before {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 8px;
+  width: 1px;
+  background: #e4e4e7;
+  content: "";
+}
+
+.jobs-event {
+  position: relative;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.jobs-event > i {
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #a1a1aa;
+  box-shadow: 0 0 0 1px #d4d4d8;
+}
+
+.jobs-event > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.jobs-event strong {
+  color: #3f3f46;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.jobs-event time,
+.jobs-event > small {
+  color: #a1a1aa;
+  font-size: 11px;
+}
+
+.jobs-event > small {
+  padding-top: 1px;
+}
+
+.jobs-empty-detail {
+  color: #a1a1aa;
+  font-size: 13px;
+}
+
+.jobs-preview-dialog {
+  max-width: min(900px, calc(100vw - 32px));
+}
+
+.jobs-preview-media {
+  display: block;
+  width: 100%;
+  max-height: min(70dvh, 720px);
+  border-radius: var(--radius-sm);
+  background: #000;
+  object-fit: contain;
+}
+
+@media (max-width: 760px) {
+  .jobs-toolbar {
+    align-items: flex-start;
+  }
+
+  .jobs-stats {
+    flex-wrap: wrap;
+    gap: 14px 20px;
+  }
+
+  .jobs-stat {
+    min-width: 64px;
+  }
+
+  .jobs-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .jobs-detail-content {
+    padding: 22px 18px;
+  }
+
+  .jobs-detail-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .jobs-detail-field:nth-child(4n) {
+    border-right: 1px solid #e4e4e7;
+  }
+
+  .jobs-detail-field:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .jobs-detail-field:nth-last-child(-n + 4) {
+    border-bottom: 1px solid #e4e4e7;
+  }
+
+  .jobs-detail-field:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .jobs-attempt-meta time {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .jobs-event {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+  }
+}
+
+/* Request states use the same semantic status palette as Adobe 管理. */
+.admin-status-queued,
+.admin-status-uploading,
+.admin-status-submitting,
+.admin-status-polling,
+.admin-status-downloading {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.admin-status-cancelled {
+  border-color: #d4d4d8;
+  background: #f4f4f5;
+  color: #71717a;
+}
+
+/* -------------------------------------------------------------------------
+ * Request log uses the Adobe 管理 shell itself.
+ *
+ * Keep the same card, toolbar, table and pagination geometry as the account
+ * page. Request-only content is constrained inside its cell so long prompt
+ * text cannot change the shared list shell.
+ * ------------------------------------------------------------------------- */
+.account-overview-card .jobs-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.account-list-card .jobs-table {
+  /* 固定列 + 内容列合计约 1185px；min-width 必须大于常见容器宽度，
+   * 否则表格被 width:100% 拉伸填满容器，横向滚动条消失，固定列失去意义。 */
+  min-width: 1280px;
+  width: 100%;
+  /* Keep the same auto layout as Adobe 管理; request-only cells constrain
+   * long values without changing the shared table model. */
+  table-layout: auto;
+  white-space: nowrap;
+}
+
+/* Request rows carry a second line of metadata in the status/time cells, but
+ * keep the same cell spacing as the Adobe account list. */
+.account-list-card .jobs-table th,
+.account-list-card .jobs-table td {
+  box-sizing: border-box;
+}
+
+.account-list-card .jobs-table tbody td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.account-list-card .jobs-table .jobs-account-cell,
+.account-list-card .jobs-table .jobs-model-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-list-card .jobs-table .jobs-prompt-cell {
+  width: 280px;
+  max-width: 280px;
+  overflow: hidden;
+}
+
+.account-list-card .jobs-table .jobs-prompt-cell-scroll {
+  width: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+  line-height: 1.4;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-list-card .jobs-table .jobs-col-select { width: 40px; }
+.account-list-card .jobs-table .jobs-col-time { width: 13%; }
+.account-list-card .jobs-table .jobs-col-status { width: 14%; }
+.account-list-card .jobs-table .jobs-col-duration { width: 9%; }
+.account-list-card .jobs-table .jobs-col-progress { width: 9%; }
+.account-list-card .jobs-table .jobs-col-account { width: 14%; }
+.account-list-card .jobs-table .jobs-col-model { width: 14%; }
+.account-list-card .jobs-table .jobs-col-prompt { width: 18%; }
+.account-list-card .jobs-table .jobs-col-actions { width: 9%; }
+
+/* Pin the leading columns (时间/状态/耗时) and the trailing 操作 column while
+ * the table scrolls horizontally. Widths and sticky offsets are fixed so the
+ * pinned cells stay aligned with each other; cell backgrounds must be opaque
+ * or rows sliding underneath would show through. */
+.account-list-card .jobs-table .jobs-sticky {
+  position: sticky;
+  z-index: 1;
+  box-sizing: border-box;
+  background: var(--surface);
+}
+
+.account-list-card .jobs-table thead .jobs-sticky {
+  z-index: 2;
+}
+
+/* Pin the colgroup hints to the same fixed widths, or percentage hints would
+ * grow the columns with the viewport and break the sticky offsets. */
+.account-list-card .jobs-table .jobs-col-select { width: 40px; }
+.account-list-card .jobs-table .jobs-col-time { width: 130px; }
+.account-list-card .jobs-table .jobs-col-status { width: 160px; }
+.account-list-card .jobs-table .jobs-col-duration { width: 90px; }
+.account-list-card .jobs-table .jobs-col-actions { width: 90px; }
+
+/* max-width + overflow 把 auto 布局中被长文本撑大的列钳回固定宽度，
+ * 保证 sticky 偏移与实际列宽一致（缺了它单元格最小宽度按内容计算）。 */
+.account-list-card .jobs-table .jobs-sticky-select {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  overflow: hidden;
+  left: 0;
+  text-align: center;
+}
+
+.account-list-card .jobs-table .jobs-sticky-select input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: #18181b;
+}
+
+.account-list-card .jobs-table .jobs-sticky-time {
+  width: 130px;
+  min-width: 130px;
+  max-width: 130px;
+  overflow: hidden;
+  left: 40px;
+}
+
+.account-list-card .jobs-table .jobs-sticky-status {
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
+  overflow: hidden;
+  left: 170px;
+}
+
+.account-list-card .jobs-table .jobs-sticky-duration {
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
+  overflow: hidden;
+  left: 330px;
+  box-shadow: inset -8px 0 8px -8px rgba(24, 24, 27, 0.14);
+}
+
+.account-list-card .jobs-table .jobs-sticky-actions {
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
+  overflow: hidden;
+  right: 0;
+  box-shadow: inset 8px 0 8px -8px rgba(24, 24, 27, 0.14);
+}
+
+/* Match the row hover background so pinned cells do not stand out. */
+.account-list-card .jobs-table tbody tr:hover .jobs-sticky {
+  background: var(--surface-soft);
+}
+
+.account-list-card .jobs-table .jobs-stage-text {
+  display: block;
+  max-width: 100%;
+  margin-right: auto;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Do not let long request metadata change the shared Adobe 管理 row geometry. */
+.account-list-card .jobs-table .jobs-time-cell,
+.account-list-card .jobs-table .jobs-account-cell,
+.account-list-card .jobs-table .jobs-model-cell,
+.account-list-card .jobs-table .jobs-prompt-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-list-card .jobs-table .jobs-time-cell span,
+.account-list-card .jobs-table .jobs-time-cell small {
+  display: block;
+}
+
+.account-list-card .jobs-table .jobs-time-cell small,
+.account-list-card .jobs-table .jobs-stage-text {
+  line-height: 14px;
+}
+
+.account-list-card .jobs-table .jobs-time-cell small,
+.account-list-card .jobs-table .jobs-stage-text,
+.account-list-card .jobs-table .jobs-progress-cell small {
+  color: #a1a1aa;
+  font-size: 12px;
+}
+
+.account-list-card .jobs-table .jobs-stage-text {
+  margin-top: 2px;
+  line-height: 12px;
+}
+
+.account-list-card .jobs-table .jobs-progress-track {
+  background: #e4e4e7;
+}
+
+.account-list-card .jobs-table .jobs-progress-track span {
+  background: #18181b;
+}
+
+/* The status badge plus its secondary stage line must occupy the same compact
+ * two-line rhythm as the account/email cells in Adobe 管理. */
+.account-list-card .jobs-table .admin-status {
+  line-height: 17px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.account-list-card .jobs-table .jobs-time-cell span,
+.account-list-card .jobs-table .jobs-time-cell small,
+.account-list-card .jobs-table .jobs-stage-text {
+  line-height: 13px;
+}
+
+@media (max-width: 1023px) {
+  .account-overview-card .jobs-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Final request-log parity pass: the request page uses the same Adobe 管理
+ * card, toolbar, table and pagination primitives. Only request-specific
+ * content (progress, stage metadata and prompt truncation) is styled here. */
+.jobs-page .account-overview-card {
+  padding: 24px;
+}
+
+.jobs-page .jobs-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.jobs-page .jobs-summary-grid .admin-card,
+.jobs-page .jobs-summary-grid .admin-card + .admin-card {
+  min-height: 82px;
+  margin-top: 0 !important;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.jobs-page .jobs-summary-grid .admin-card span {
+  color: #71717a;
+  font-size: 13px;
+}
+
+.jobs-page .jobs-summary-grid .admin-card strong {
+  color: #18181b;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.jobs-page .account-list-card {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.jobs-page .account-list-card .account-list-filters {
+  min-height: 68px;
+  margin: 0;
+  padding: 16px;
+  border-bottom: 1px solid #e4e4e7;
+  gap: 12px;
+}
+
+.jobs-page .account-list-card .account-search {
+  width: 380px;
+  max-width: 380px;
+  flex: 1 1 380px;
+}
+
+.jobs-page .account-list-card .account-filter-select {
+  width: 160px;
+  min-width: 160px;
+  flex: 0 0 160px;
+}
+
+.jobs-page .account-list-card .account-search-button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.jobs-page .account-list-card .jobs-table {
+  width: 100%;
+  /* 1920 全屏下内容容器实测 ~1630px，min-width 必须超过它才能保证
+   * 任何常见视口都有横向滚动空间，固定列才始终有意义。 */
+  min-width: 1680px;
+  table-layout: auto;
+  white-space: nowrap;
+}
+
+.jobs-page .account-list-card .jobs-table th,
+.jobs-page .account-list-card .jobs-table td {
+  box-sizing: border-box;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.jobs-page .account-list-card .jobs-table th {
+  height: 40px;
+  padding: 0 12px;
+  color: #71717a;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.jobs-page .account-list-card .jobs-table td {
+  padding: 12px;
+}
+
+.jobs-page .account-list-card .jobs-table tbody tr:hover {
+  background: #fafafa;
+}
+
+.jobs-page .account-list-card .jobs-table .jobs-account-cell,
+.jobs-page .account-list-card .jobs-table .jobs-model-cell,
+.jobs-page .account-list-card .jobs-table .jobs-prompt-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.jobs-page .account-list-card .jobs-table .jobs-prompt-cell-scroll {
+  width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobs-page .account-list-card .jobs-table .admin-table-actions {
+  width: 100%;
+  justify-content: center;
+}
+
+.jobs-page .account-list-card .account-pagination {
+  min-height: 58px;
+  margin: 0;
+  padding: 12px 16px;
+  border-top: 1px solid #e4e4e7;
+}
+
+@media (max-width: 1023px) {
+  .jobs-page .jobs-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .jobs-page .account-list-card .account-list-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .jobs-page .account-list-card .account-search,
+  .jobs-page .account-list-card .account-filter-select,
+  .jobs-page .account-list-card .account-search-button {
+    width: 100%;
+    max-width: none;
+    flex: 1 1 auto;
+    margin-left: 0;
+  }
+}
