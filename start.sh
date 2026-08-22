@@ -47,4 +47,7 @@ echo ""
 echo "✅ 部署完成"
 echo "   管理后台:  http://127.0.0.1:${WEB_PORT}/login"
 echo "   账号/密码: admin / admin"
-[ -z "${ROXYBROWSER_API_TOKEN:-}" ] && echo "   （未配置 Roxy，sherlockToken 请在后台「sherlock」页手动输入）"
+if [ -z "${ROXYBROWSER_API_TOKEN:-}" ]; then
+  echo "   （未配置 Roxy，sherlockToken 请在后台「sherlock」页手动输入）"
+fi
+exit 0

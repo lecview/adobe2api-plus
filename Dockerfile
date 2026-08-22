@@ -25,7 +25,10 @@ COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/next.config.ts ./next.config.ts
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
-RUN mkdir -p /app/data/generated && chown -R node:node /app/data
+# 只建空挂载点 /app/data 并授权给 node；generated 子目录由应用保存媒体时 mkdir -p 按需创建。
+# 不要在此预建 /app/data/generated：named volume 首次挂载会复制镜像目录内容，
+# web/worker 两容器共享 generated-media 卷时会因重复复制导致 "file exists" 报错。
+RUN mkdir -p /app/data && chown -R node:node /app/data
 USER node
 EXPOSE 3000
 CMD ["npm", "run", "start"]
