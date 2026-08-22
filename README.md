@@ -67,7 +67,18 @@ cd adobe2api-plus
 docker compose up -d --build
 ```
 
-3. **访问管理后台**：
+3. **sherlockToken 自动铸造（可选，需 Roxy 浏览器）**：
+
+sherlockToken 铸造要连接 Roxy 浏览器打开的 Chrome（CDP 端口只监听宿主机 `127.0.0.1`，容器无法直连）。因此在 macOS / Docker Desktop 下自动铸造需在**宿主机**额外跑一个铸造服务：
+
+```bash
+# 先在 .env 里配好 ROXYBROWSER_API_BASE / ROXYBROWSER_API_TOKEN（见 .env.example）
+npm run mint-service   # 监听 0.0.0.0:50002
+```
+
+并在 `.env` 配置 `ROXYBROWSER_MINT_API=http://host.docker.internal:50002`，应用便会优先调宿主机铸造服务拿 token。不配置则走后台**手动输入** token（后台「sherlock」页粘贴 `x-arp-session-id`）。
+
+4. **访问管理后台**：
 
 - 地址：`http://127.0.0.1:3000/login`
 - 账号：`admin`

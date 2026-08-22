@@ -117,7 +117,13 @@ export async function pullSherlockFromRoxyBrowser(): Promise<string> {
       }).catch(() => undefined);
     }
   } finally {
-    // 无论成败都删除临时窗口，避免残留占用资源
+    // 无论成败都先关窗再删窗：Roxy 要求 close 后才能 delete，
+    // 否则 puppeteer.connect 等中间步骤失败时会残留窗口、耗尽窗口额度。
+    await fetch(`${config.apiBase}/browser/close`, {
+      method: "POST",
+      headers: { token: config.apiToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId, dirId }),
+    }).catch(() => undefined);
     await deleteRoxyWindow(config.apiBase, config.apiToken, workspaceId, dirId);
   }
 }
@@ -140,16 +146,14 @@ export function validateSherlockToken(value: string): { sid: string; ftr: string
 export async function saveGlobalSherlockToken(token: string, source: "browser" | "manual"): Promise<Date> {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SHERLOCK_TTL_MS);
+  // upsert：singleton 行可能尚不存在（全新部署时系统设置未保存过），
+  // 用 insert + onDuplicateKeyUpdate 确保 token 一定落库，否则 UPDATE 0 行导致 token 丢失。
   await db
-    .update(systemSetting)
-    .set({
-      sherlockToken: token,
-      sherlockExpiresAt: expiresAt,
-      sherlockSource: source,
-      sherlockUpdatedAt: now,
-      updatedAt: now,
-    })
-    .where(eq(systemSetting.id, "singleton"));
+    .insert(systemSetting)
+    .values({ id: "singleton", sherlockToken: token, sherlockExpiresAt: expiresAt, sherlockSource: source, sherlockUpdatedAt: now, updatedAt: now })
+    .onDuplicateKeyUpdate({
+      set: { sherlockToken: token, sherlockExpiresAt: expiresAt, sherlockSource: source, sherlockUpdatedAt: now, updatedAt: now },
+    });
   return expiresAt;
 }
 
@@ -239,8 +243,13 @@ async function getRoxyBrowserConfig(): Promise<RoxyConfig> {
 /** GET /browser/workspace 自动获取第一个团队（workspace）id */
 async function resolveWorkspaceId(apiBase: string, apiToken: string): Promise<number> {
   const res = await fetch(`${apiBase}/browser/workspace`, { headers: { token: apiToken } });
-  const json = (await res.json().catch(() => ({}))) as { code?: number; data?: Array<{ id?: number }> };
-  const id = json.data?.[0]?.id;
+  const json = (await res.json().catch(() => ({}))) as {
+    code?: number;
+    data?: Array<{ id?: number }> | { rows?: Array<{ id?: number }>; total?: number };
+  };
+  // Roxy 新版返回 data.rows[].id，旧版返回 data[].id，两种结构都兼容
+  const list = Array.isArray(json.data) ? json.data : (json.data?.rows ?? []);
+  const id = list[0]?.id;
   if (!id || !Number.isInteger(id) || id <= 0) {
     throw new Error("RoxyBrowser 未返回任何团队（workspace），请先在客户端创建团队");
   }
