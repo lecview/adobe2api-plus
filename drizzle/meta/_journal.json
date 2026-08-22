@@ -15,6 +15,13 @@
       "when": 1787380330307,
       "tag": "0001_modern_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1787381655762,
+      "tag": "0002_flowery_junta",
+      "breakpoints": true
     }
   ]
 }

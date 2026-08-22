@@ -106,12 +106,12 @@ export const systemSetting = mysqlTable("systemsetting", {
   sherlockRefreshMinutes: int("sherlockRefreshMinutes").default(5).notNull(),
   /** 是否启用 sherlockToken 定时自动刷新（worker 主循环执行） */
   sherlockAutoRefreshEnabled: boolean("sherlockAutoRefreshEnabled").default(true).notNull(),
-  /** 积分刷新后自动删除：剩余积分低于此阈值的账号（0 = 不启用） */
-  minCreditsThreshold: int("minCreditsThreshold").default(0).notNull(),
+  /** 积分刷新后自动删除：剩余积分低于此阈值的账号（0 = 不启用）；默认 100 */
+  minCreditsThreshold: int("minCreditsThreshold").default(100).notNull(),
   /** 是否直接返回 Adobe 原地址（不下载到本地，节省时间）；默认 false = 下载后存本地 */
   returnOriginalUrl: boolean("returnOriginalUrl").default(false).notNull(),
-  /** worker 进程内并发生图任务数（默认 1；调大后单 worker 即可并行跑多个任务） */
-  workerConcurrency: int("workerConcurrency").default(1).notNull(),
+  /** worker 进程内并发生图任务数（默认 5；调大后单 worker 即可并行跑多个任务） */
+  workerConcurrency: int("workerConcurrency").default(5).notNull(),
   /** 全局 sherlockToken（x-arp-session-id）：浏览器会话级，所有账号共用，与账号无关 */
   sherlockToken: text("sherlockToken"),
   sherlockExpiresAt: datetime("sherlockExpiresAt", { mode: "date", fsp: 3 }),
@@ -125,7 +125,7 @@ export const systemSetting = mysqlTable("systemsetting", {
   tokenRotationStrategy: varchar("tokenRotationStrategy", { length: 32 }).default("round_robin").notNull(),
   batchConcurrency: int("batchConcurrency").default(5).notNull(),
   creditsRefreshConcurrency: int("creditsRefreshConcurrency").default(1).notNull(),
-  accountMaxConcurrency: int("accountMaxConcurrency").default(1).notNull(),
+  accountMaxConcurrency: int("accountMaxConcurrency").default(3).notNull(),
   generatedMaxSizeMb: int("generatedMaxSizeMb").default(1024).notNull(),
   generatedPruneSizeMb: int("generatedPruneSizeMb").default(200).notNull(),
   mediaRetentionDays: int("mediaRetentionDays").default(30).notNull(),
