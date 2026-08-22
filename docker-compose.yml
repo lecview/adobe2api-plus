@@ -1,39 +1,78 @@
-# 固定 project name：手动部署与 GitHub Actions 部署必须使用同一 project，
-# 否则会产生重复容器（如 ac765198deb6_adobe2api-plus-worker-1 与 adobe2api-plus-worker-1 并存）。
 name: adobe2api-plus
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 一键部署：
+#   1. cp .env.example .env           # 填写 SESSION_SECRET / ENCRYPTION_KEY
+#   2. docker compose up -d --build   # 自动构建镜像并启动 mysql + web + worker
+#
+# 数据库表结构由应用首次启动时自动创建（幂等 migrate，无需手动 db:push）。
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-app-env: &app-env
+  DATABASE_URL: mysql://${MYSQL_USER:-adobe}:${MYSQL_PASSWORD:-adobe}@mysql:3306/${MYSQL_DATABASE:-adobe}
+  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required (see README)}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required (see README)}
+  ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
+  ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-admin123}
+  MEDIA_ROOT: /app/data/generated
+  NEXT_TELEMETRY_DISABLED: "1"
+
 services:
-  # 数据库表已由 Drizzle schema 精确映射（src/lib/db/schema.ts），
-  # 生产环境无需重建/迁移表；如需同步 schema 可手动执行 npm run db:push。
+  # MySQL 8 数据库
+  mysql:
+    image: mysql:8.0
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-adobe}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-adobe}
+      MYSQL_USER: ${MYSQL_USER:-adobe}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-adobe}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  # Web：Next.js（OpenAI 兼容 API 网关 + 管理后台）
   web:
     image: adobe2api-plus:local
     build:
       context: .
-      args:
-        GIT_SHA: "${GIT_SHA:-dev}"
-    command: npm run start
-    env_file: .env.production
+      dockerfile: Dockerfile
+    environment: *app-env
     ports:
-      - "${ADOBE2API_PLUS_BIND_ADDRESS:-127.0.0.1}:${ADOBE2API_PLUS_PORT:-3001}:3000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "${WEB_PORT:-3000}:3000"
     volumes:
-      - generated-media:/app/data/generated
+      - generated-media:/app/data
+    depends_on:
+      mysql:
+        condition: service_healthy
     restart: unless-stopped
 
+  # Worker：后台任务（账号刷新 / sherlock 令牌 / 生成任务调度）
   worker:
     image: adobe2api-plus:local
-    build: .
-    command: npm run worker
-    env_file: .env.production
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "node_modules/tsx/dist/cli.mjs", "src/worker/index.ts"]
+    environment: *app-env
     volumes:
-      - generated-media:/app/data/generated
-    # 部署重建容器时等待当前任务完成（worker 收到 SIGTERM 后优雅退出），
-    # 避免运行中的生图任务被 docker stop 默认 10s 强杀（表现为 worker_error: terminated）
-    stop_grace_period: 300s
+      - generated-media:/app/data
+    depends_on:
+      mysql:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
+  mysql-data:
   generated-media:

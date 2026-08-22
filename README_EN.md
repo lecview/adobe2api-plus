@@ -48,6 +48,44 @@ Adobe Firefly's third-party model endpoint (`firefly-3p.ff.adobe.io`, serving GP
 
 ## 1. Deployment
 
+### Docker one-click deployment (recommended)
+
+Prerequisite: [Docker](https://www.docker.com/) and Docker Compose installed.
+
+1. **Clone the repository**:
+
+```bash
+git clone https://github.com/songsongQAQ/adobe2api-plus.git
+cd adobe2api-plus
+```
+
+2. **Configure environment variables** (only two secrets required):
+
+```bash
+cp .env.example .env
+openssl rand -hex 32   # paste output into SESSION_SECRET in .env
+openssl rand -hex 16   # paste output into ENCRYPTION_KEY in .env
+```
+
+You may also set `ADMIN_BOOTSTRAP_USERNAME` / `ADMIN_BOOTSTRAP_PASSWORD` in `.env` (the admin account auto-created on first start).
+
+3. **Build and start everything in one command** (pulls MySQL 8, creates database and tables, starts Web + Worker):
+
+```bash
+docker compose up -d --build
+```
+
+4. **Access the admin console**:
+
+- URL: `http://127.0.0.1:3000/login`
+- Username: `admin` (or the one you set in `.env`)
+- Password: `ADMIN_BOOTSTRAP_PASSWORD` in `.env`; falls back to `admin123` if unset (**change it in production**)
+
+> - MySQL 8 starts automatically with compose; tables are migrated automatically on first start — **no manual `db:push` needed**.
+> - Persistence: MySQL data in the `mysql-data` volume, generated media in the `generated-media` volume.
+> - Status / logs: `docker compose ps`, `docker compose logs -f web worker`.
+> - Default database credentials are `adobe / adobe` (database `adobe`); override via `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` in `.env`.
+
 ### Local development
 
 Prerequisites: Node.js 20+, MySQL 8.x (or MariaDB 10.x).

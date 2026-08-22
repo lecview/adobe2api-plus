@@ -50,6 +50,44 @@ Adobe Firefly 的第三方模型端点（`firefly-3p.ff.adobe.io`，承载 GPT /
 
 ## 1. 部署方式
 
+### Docker 一键部署（推荐）
+
+前置：已安装 [Docker](https://www.docker.com/) 与 Docker Compose。
+
+1. **克隆项目**：
+
+```bash
+git clone https://github.com/songsongQAQ/adobe2api-plus.git
+cd adobe2api-plus
+```
+
+2. **配置环境变量**（只需填两个安全密钥）：
+
+```bash
+cp .env.example .env
+openssl rand -hex 32   # 输出填入 .env 的 SESSION_SECRET
+openssl rand -hex 16   # 输出填入 .env 的 ENCRYPTION_KEY
+```
+
+`.env` 里还可选设置 `ADMIN_BOOTSTRAP_USERNAME` / `ADMIN_BOOTSTRAP_PASSWORD`（首次启动自动创建的管理员账号）。
+
+3. **一键构建并启动**（自动拉取 MySQL 8 镜像、创建数据库与表结构、启动 Web + Worker）：
+
+```bash
+docker compose up -d --build
+```
+
+4. **访问管理后台**：
+
+- 地址：`http://127.0.0.1:3000/login`
+- 账号：`admin`（或你在 `.env` 中设置的用户名）
+- 密码：`.env` 中的 `ADMIN_BOOTSTRAP_PASSWORD`；未设置则回退为默认 `admin123`（**生产环境务必修改**）
+
+> - 数据库（MySQL 8）随 compose 自动启动，表结构由应用首次启动时自动迁移，**无需手动 `db:push`**。
+> - 数据持久化：MySQL 数据在 `mysql-data` 卷，生成媒体在 `generated-media` 卷。
+> - 查看状态/日志：`docker compose ps`、`docker compose logs -f web worker`。
+> - 数据库账号默认 `adobe / adobe`（库名 `adobe`），可通过 `.env` 的 `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` 覆盖。
+
 ### 本地开发 / 运行
 
 依赖：Node.js 20+、MySQL 8.x（或 MariaDB 10.x）。
