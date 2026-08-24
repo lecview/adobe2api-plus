@@ -50,7 +50,7 @@ Adobe Firefly's third-party model endpoint (`firefly-3p.ff.adobe.io`, serving GP
 
 ### Docker one-click deployment (recommended)
 
-Prerequisite: [Docker](https://www.docker.com/) and Docker Compose installed.
+Prerequisite: an **x86_64 Linux server** (fingerprint-chromium ships x86_64 binaries only) with [Docker](https://www.docker.com/) and Docker Compose installed. Apple Silicon works via Docker Desktop for local trials (amd64 emulation runs but mints slower — not recommended for production).
 
 1. **Clone the repository**:
 

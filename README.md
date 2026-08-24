@@ -52,7 +52,7 @@ Adobe Firefly 的第三方模型端点（`firefly-3p.ff.adobe.io`，承载 GPT /
 
 ### Docker 一键部署（推荐）
 
-前置：已安装 [Docker](https://www.docker.com/) 与 Docker Compose。
+前置：一台 **x86_64 Linux 服务器**（内置铸造用的 fingerprint-chromium 仅发布 x86_64 二进制）并安装好 [Docker](https://www.docker.com/) 与 Docker Compose。Apple Silicon 机器可用 Docker Desktop 本地体验（amd64 模拟能跑但铸造较慢，不建议做生产环境）。
 
 1. **克隆项目**：
 
