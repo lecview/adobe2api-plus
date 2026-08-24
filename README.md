@@ -27,11 +27,11 @@ Adobe Firefly 的第三方模型端点（`firefly-3p.ff.adobe.io`，承载 GPT /
    - **408 → 标记风控，换号重试**：提交遇到 408 时，把该账号标记为「已风控」（从随机选号池中移除，**不删除**），换一个账号重试（最多 3 次）；标记可在后台手动解除。
    - **401 → 彻底删除**：401 表示 token 已失效，直接删除账号（任务历史靠快照保留），与 408 明确区分。
 
-3. **sherlockToken（`x-arp-session-id`）**：维护浏览器会话态，通过 [Roxy 浏览器](https://roxybrowser.cn/invite/XZx8Sf)自动铸造或手动输入，由 worker 按固定周期（默认 5 分钟）自动刷新，提交链路自动使用最新 token。
+3. **sherlockToken（`x-arp-session-id`）**：维护浏览器会话态，通过内置 [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) 铸造服务（headful + Xvfb）自动铸造或手动输入，由 worker 按固定周期（默认 5 分钟）自动刷新，提交链路自动使用最新 token。
 
 > 因此：**账号供给是唯一瓶颈** —— 第三方模型端点能否使用取决于账号是否被标记，需要干净账号。
 
-> 🎁 sherlockToken 依赖 [Roxy 浏览器](https://roxybrowser.cn/invite/XZx8Sf)自动铸造，欢迎使用我们的推广链接注册。
+> 🎁 sherlockToken 由内置 fingerprint-chromium 铸造服务自动维护，Docker 一键部署零配置开箱即用。
 
 ---
 
@@ -61,19 +61,17 @@ git clone https://github.com/songsongQAQ/adobe2api-plus.git
 cd adobe2api-plus
 ```
 
-2. **一键构建并启动**（零配置，开箱即用——自动拉取 MySQL 8 镜像、创建数据库与表结构、启动 Web + Worker）：
+2. **一键构建并启动**（零配置，开箱即用——自动拉取 MySQL 8 镜像、创建数据库与表结构、启动 Web + Worker + mint 铸造服务）：
 
 ```bash
-./start.sh          # 推荐：自动探测宿主机 IP 并注入 sherlock 自动铸造所需变量
-# 等价于手动执行：
-# docker compose up -d --build
+docker compose up -d --build
 ```
 
-3. **sherlockToken 自动铸造（可选，需 Roxy 浏览器）**：
+3. **sherlockToken 自动铸造（内置，零配置）**：
 
-- 先在 `.env` 配好 `ROXYBROWSER_API_BASE`（Roxy 客户端【API → API配置】里的端口，默认 50000）与 `ROXYBROWSER_API_TOKEN`（API Key）。
-- `./start.sh` 会自动探测宿主机局域网 IP 并注入 `ROXYBROWSER_CDP_HOST`，容器内的 puppeteer 即可直连宿主机 Roxy 的 Chrome CDP 完成铸造（铸造窗口通过 `--remote-debugging-address=0.0.0.0` 监听所有网卡）。
-- 不配 Roxy 则走后台**手动输入** token（后台「sherlock」页粘贴 `x-arp-session-id`），不影响其它功能。
+- Docker 部署自动包含 `mint` 容器（fingerprint-chromium 148 + Xvfb 有头铸造），worker 每 5 分钟自动拉取新 token，无需任何外部依赖。
+- 本地开发：`.env.development` 设置 `FP_CHROME_BIN`（本进程直启铸造）或 `SHERLOCK_MINT_API`（连接自建铸造服务）。
+- 均未配置则走后台**手动输入** token（后台「sherlock」页粘贴 `x-arp-session-id`），不影响其它功能。
 
 4. **访问管理后台**：
 
@@ -82,7 +80,7 @@ cd adobe2api-plus
 - 密码：`admin`
 
 > - **默认管理员账号密码为 `admin` / `admin`**（首次启动自动创建），**生产环境务必修改**。
-> - 安全密钥（`SESSION_SECRET` / `ENCRYPTION_KEY`）已内置默认值，开箱即用。生产环境请创建 `.env` 覆盖：`cp .env.example .env`，用 `openssl rand -hex 32`（会话密钥）与 `openssl rand -hex 16`（加密密钥）生成自己的随机值。
+> - 安全密钥（`SESSION_SECRET` / `ENCRYPTION_KEY`）已内置默认值，开箱即用。生产环境请创建 `.env` 覆盖：`cp .env.example .env`，用 `openssl rand -hex 32`（会话密钥）与 `openssl rand -hex 32`（加密密钥）生成自己的随机值。
 > - 数据库（MySQL 8）随 compose 自动启动，表结构由应用首次启动时自动迁移，**无需手动 `db:push`**。
 > - 数据持久化：MySQL 数据在 `mysql-data` 卷，生成媒体在 `generated-media` 卷。
 > - 查看状态/日志：`docker compose ps`、`docker compose logs -f web worker`。
@@ -485,7 +483,7 @@ Web 与 Worker 在启动前会主动校验配置（`validateRuntime`），关键
 
 > 其余参数（生成媒体目录、Adobe 上游地址、Token 刷新间隔、媒体保留时长、代理池等）均可在管理后台「系统设置」中配置，无需通过环境变量设置。
 >
-> sherlockToken 自动铸造用到的 Roxy 浏览器变量（`ROXYBROWSER_API_BASE` / `ROXYBROWSER_API_TOKEN` 等）见 `.env.example`；不配置则走后台手动输入 token。
+> sherlockToken 自动铸造变量（`SHERLOCK_MINT_API` / `FP_CHROME_BIN` 等）见 `.env.example`；Docker 一键部署无需配置（内置 mint 容器）；均不配置则走后台手动输入 token。
 
 ---
 

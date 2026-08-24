@@ -25,11 +25,11 @@ Adobe Firefly's third-party model endpoint (`firefly-3p.ff.adobe.io`, serving GP
    - **408 → flag as risk-controlled, rotate accounts**: on a 408, mark that account "risk-flagged" (removed from the random selection pool, **not deleted**) and retry with another account (up to 3 attempts); the flag can be manually cleared in the admin console.
    - **401 → delete outright**: a 401 means the token is invalid, so the account is deleted (job history is preserved via snapshots), clearly distinguished from 408.
 
-3. **sherlockToken (`x-arp-session-id`)**: maintains the browser session state, minted via the [Roxy browser](https://roxybrowser.cn/invite/XZx8Sf) or entered manually, auto-refreshed by the worker on a fixed interval (default 5 minutes), and automatically used by the submission pipeline.
+3. **sherlockToken (`x-arp-session-id`)**: maintains the browser session state, minted by the built-in [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) mint service (headful + Xvfb) or entered manually, auto-refreshed by the worker on a fixed interval (default 5 minutes), and automatically used by the submission pipeline.
 
 > Therefore: **account supply is the only bottleneck** — whether the third-party model endpoint works depends on whether the account is flagged, so clean accounts are required.
 
-> 🎁 sherlockToken is minted via the [Roxy browser](https://roxybrowser.cn/invite/XZx8Sf). You are welcome to register through our referral link.
+> 🎁 sherlockToken is minted automatically by the built-in fingerprint-chromium service — zero-config with Docker one-click deployment.
 
 ---
 
@@ -475,7 +475,7 @@ The web and worker processes validate their configuration up front (`validateRun
 
 > All other settings (media directory, Adobe upstream URL, token refresh interval, media retention, proxy pool, etc.) are configurable in the admin console under **System Settings** — no environment variables needed.
 >
-> The Roxy browser variables used for automatic sherlockToken minting (`ROXYBROWSER_API_BASE` / `ROXYBROWSER_API_TOKEN`, etc.) are listed in `.env.example`; if unset, you can enter the token manually in the admin console.
+> Automatic sherlockToken minting variables (`SHERLOCK_MINT_API` / `FP_CHROME_BIN`, etc.) are listed in `.env.example`; Docker one-click deployment needs none (built-in mint container); if unset, you can enter the token manually in the admin console.
 
 ---
 
