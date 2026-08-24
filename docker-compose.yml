@@ -90,12 +90,11 @@ services:
     restart: unless-stopped
 
   # Worker：后台任务（账号刷新 / sherlock 令牌 / 生成任务调度）
-  # 与 web 分开打 tag：compose v5 bake 对同一镜像名并发导出会偶发 "already exists"
+  # 直接复用 web 构建出的镜像（两份构建会并行各跑一次 npm run build，偶发资源竞态失败；
+  # 且同镜像名并发导出在 compose v5 bake 下会偶发 "already exists"）。
+  # compose 先完成全部 build 再启动容器，因此 worker 总能拿到 web 刚构建好的镜像。
   worker:
-    image: adobe2api-plus-worker:local
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: adobe2api-plus:local
     command: ["node", "node_modules/tsx/dist/cli.mjs", "src/worker/index.ts"]
     environment: *app-env
     volumes:
