@@ -67,11 +67,14 @@ cd adobe2api-plus
 docker compose up -d --build
 ```
 
-3. **sherlockToken 自动铸造（内置，零配置）**：
+3. **sherlockToken 铸造流程（内置 fingerprint-chromium，无需 Roxy 浏览器）**：
 
-- Docker 部署自动包含 `mint` 容器（fingerprint-chromium 148 + Xvfb 有头铸造），worker 每 5 分钟自动拉取新 token，无需任何外部依赖。
-- 本地开发：`.env.development` 设置 `FP_CHROME_BIN`（本进程直启铸造）或 `SHERLOCK_MINT_API`（连接自建铸造服务）。
-- 均未配置则走后台**手动输入** token（后台「sherlock」页粘贴 `x-arp-session-id`），不影响其它功能。
+- **Docker 一键部署（自动，无需任何配置）**：内置 `mint` 容器（fingerprint-chromium 148 + Xvfb 有头铸造）。worker 每 5 分钟自动向 mint 铸造新 token 并全局保存，提交链路自动携带最新值，全程无外部依赖。
+- **本地开发（自动）**：`.env.development` 设置 `FP_CHROME_BIN`（本进程直启 fingerprint-chromium 铸造）或 `SHERLOCK_MINT_API`（连接自建/远程 mint 铸造服务）。
+- **手动输入（兜底）**：未配置任何铸造引擎时，在后台「sherlock」页粘贴手动获取的 token，不影响其它功能。获取方式：在已登录 `firefly.adobe.com` 的浏览器控制台执行：
+  ```js
+  copy(document.cookie.match(/(?:^|;\s*)sherlockToken=([^;]+)/)?.[1] ?? "")
+  ```
 
 4. **访问管理后台**：
 

@@ -65,7 +65,16 @@ cd adobe2api-plus
 docker compose up -d --build
 ```
 
-3. **Access the admin console**:
+3. **sherlockToken minting flow (built-in fingerprint-chromium, no Roxy browser needed)**:
+
+- **Docker one-click deployment (automatic, zero config)**: the built-in `mint` container (fingerprint-chromium 148 + Xvfb, headful) mints tokens; the worker automatically mints a fresh token via mint every 5 minutes and stores it globally — the submission pipeline always carries the latest value, with no external dependencies.
+- **Local development (automatic)**: set `FP_CHROME_BIN` in `.env.development` (start fingerprint-chromium in-process) or `SHERLOCK_MINT_API` (connect to a self-hosted / remote mint service).
+- **Manual entry (fallback)**: when no minting engine is configured, paste a manually obtained token on the admin "sherlock" page — other features are unaffected. How to get one: run this in the browser console while logged into `firefly.adobe.com`:
+  ```js
+  copy(document.cookie.match(/(?:^|;\s*)sherlockToken=([^;]+)/)?.[1] ?? "")
+  ```
+
+4. **Access the admin console**:
 
 - URL: `http://127.0.0.1:3000/login`
 - Username: `admin`
