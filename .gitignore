@@ -27,3 +27,6 @@ accounts*.json
 /.agents/
 /.claude/
 /check-migration.ts
+
+# ── sherlockToken 本地铸造调试资产（含大体积 chromium dmg / .app，不入库）──
+/.sherlock-test/

@@ -46,7 +46,8 @@ export function browserSecurityHeaders(): Record<string, string> {
   const platform = /Macintosh/.test(ua) ? '"macOS"' : /Linux/.test(ua) ? '"Linux"' : '"Windows"';
   return {
     "User-Agent": ua,
-    "sec-ch-ua": `"Not=A?Brand";v="99", "Google Chrome";v="${version}", "Chromium";v="${version}"`,
+    // 对齐 fingerprint-chromium 148 实测 Client Hints（品牌顺序与 grease 令牌均按实机数据）
+    "sec-ch-ua": `"Chromium";v="${version}", "Google Chrome";v="${version}", "Not/A)Brand";v="99"`,
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": platform,
     "sec-fetch-site": "cross-site", // firefly.adobe.com → firefly-3p.ff.adobe.io 属跨站（对齐官网实测）

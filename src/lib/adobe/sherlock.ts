@@ -7,19 +7,31 @@
  *
  * 生命周期（实测）：sid 组件 30 分钟 → token 实际寿命约 30min。
  * 刷新周期 = 系统设置 sherlockRefreshMinutes（试验期 5 分钟：每次全新随机环境拉取，
- * 环境新鲜度是 3p 风控的决定性变量——随机 IP + 随机指纹 + 铸后删窗口）。
+ * 环境新鲜度是 3p 风控的决定性变量）。
  *
- * 来源（sherlockSource）："browser" RoxyBrowser 自动拉取 / "manual" 手动输入。
+ * 铸造引擎（2026-08-23 换代，不再使用 RoxyBrowser）：
+ *   1. SHERLOCK_MINT_API       → 远程 fingerprint-chromium 铸造服务（Docker 一键部署的 mint sidecar）
+ *   2. FP_CHROME_BIN           → 本进程直启 fingerprint-chromium 铸造（本地开发）
+ *   铸造必须「有头」：实测 headless token 提交几乎全 408，有头才是可用 token。
+ *
+ * 来源（sherlockSource）："browser" 自动铸造 / "manual" 手动输入。
  *
  * ── 浏览器一行命令（管理员手动获取，在已登录 firefly.adobe.com 的浏览器控制台执行）──
  * 复制完整 token：
  *   copy(document.cookie.match(/(?:^|;\s*)sherlockToken=([^;]+)/)?.[1] ?? "")
  * ─────────────────────────────────────────────────────────────────────────────
  */
-import { eq } from "drizzle-orm";
+import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { systemSetting } from "@/lib/db/schema";
+import { proxyNode, systemSetting } from "@/lib/db/schema";
 import { getSystemSettings } from "@/lib/system-settings";
+import { startSocksRelay, type FpRelay } from "@/lib/adobe/fp-relay";
+import { decryptSecret } from "@/lib/crypto";
+import type { ProxySnapshotEntry } from "@/lib/proxy-pool";
 
 /** token 有效寿命（sid 组件 30 分钟）；拉取周期由系统设置 sherlockRefreshMinutes 控制（试验期 5 分钟） */
 export const SHERLOCK_TTL_MS = 30 * 60 * 1000;
@@ -37,38 +49,134 @@ export type SherlockStatus = {
   refreshMinutes: number | null;
 };
 
-/** RoxyBrowser API 拉取：铸造全新 sherlockToken（四字段完整），完成后关闭浏览器窗口 */
-export async function pullSherlockFromRoxyBrowser(): Promise<string> {
-  const { default: puppeteer } = await import("puppeteer-core");
-  const config = await getRoxyBrowserConfig();
-  // 自动获取 workspace + 自动创建窗口（无需手动配置 WORKSPACE_ID / DIR_ID）
-  const workspaceId = await resolveWorkspaceId(config.apiBase, config.apiToken);
-  const dirId = await createRoxyWindow(config.apiBase, config.apiToken, workspaceId);
-  try {
-    const openRes = await fetch(`${config.apiBase}/browser/open`, {
-      method: "POST",
-      headers: { token: config.apiToken, "Content-Type": "application/json" },
-      // --remote-debugging-address=0.0.0.0：让 Chrome CDP 监听所有网卡，
-      // 容器才能通过宿主机 IP 直连 CDP（默认只绑 127.0.0.1，容器够不到）。
-      // 注意：--remote-debugging-port 是 Roxy 内置参数改不了，但 address 可改。
-      body: JSON.stringify({ workspaceId, dirId, forceOpen: true, headless: true, args: ["--remote-debugging-address=0.0.0.0"] }),
-    });
-    const openJson = (await openRes.json()) as { code?: number; data?: { ws?: string } };
-    let ws = openJson.data?.ws ?? "";
-    if (!ws) throw new Error("RoxyBrowser open 未返回 ws 连接地址");
-    // 容器内运行时，RoxyBrowser 返回的 ws 是宿主机 127.0.0.1，需替换为容器可达的宿主机地址
-    if (config.cdpHost && ws.startsWith("ws://")) {
-      ws = ws.replace(/ws:\/\/127\.0\.0\.1(:\d+)/, `ws://${config.cdpHost}$1`);
-    }
+// ── fingerprint-chromium 铸造引擎（2026-08-23 换代，原 RoxyBrowser 依赖已移除）──
+// 实测结论：
+//   - headless 铸造的 token 触发 408 比例极高（~0-10% 200），有头铸造才有质量
+//   - 有头 + 提交层真实 Client Hints 对齐 → 200 率 ≈ 70-90%（好提交节点组合更稳）
+//   - Chromium 对 socks5://user:pass@ --proxy-server 有缺陷 → SOCKS5 节点走 fp-relay 中继
+const FP_MINT_PAGE = "https://firefly.adobe.com/generate/image";
+const FP_SHERLOCK_SDK = "https://commerce.adobe.com/amsterdam/sdk/sherlock.min.js";
 
+function fpChromeBin(): string {
+  return process.env.FP_CHROME_BIN?.trim() || "";
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForCdp(port: number, attempts = 60): Promise<void> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/json/version`);
+      if (res.ok) return;
+    } catch { /* 未就绪 */ }
+    await sleepMs(500);
+  }
+  throw new Error(`fingerprint-chromium CDP ${port} 未就绪`);
+}
+
+async function randomEnabledProxyEntry(): Promise<ProxySnapshotEntry | null> {
+  const nodes = await db.select().from(proxyNode).where(eq(proxyNode.enabled, true)).orderBy(asc(proxyNode.displayOrder));
+  if (!nodes.length) return null;
+  const node = nodes[Math.floor(Math.random() * nodes.length)];
+  return {
+    id: node.id,
+    version: node.version,
+    protocol: node.protocol,
+    host: node.host,
+    port: node.port,
+    encryptedUsername: node.encryptedUsername,
+    encryptedPassword: node.encryptedPassword,
+  };
+}
+
+function httpProxyServerUrl(entry: ProxySnapshotEntry): string {
+  const user = entry.encryptedUsername ? decryptSecret(entry.encryptedUsername) : "";
+  const pass = entry.encryptedPassword ? decryptSecret(entry.encryptedPassword) : "";
+  const auth = user ? `${encodeURIComponent(user)}:${encodeURIComponent(pass)}@` : "";
+  return `http://${auth}${entry.host}:${entry.port}`;
+}
+
+/** 启动 fingerprint-chromium（随机 seed 指纹 + 随机代理），返回 CDP ws 端点与清理句柄 */
+async function launchFpChrome(proxyServerUrl: string): Promise<{ ws: string; cleanup: () => Promise<void> }> {
+  const bin = fpChromeBin();
+  if (!bin) throw new Error("FP_CHROME_BIN 未配置");
+  const profileDir = await mkdtemp(path.join(tmpdir(), "fp-sherlock-"));
+  const port = 20000 + Math.floor(Math.random() * 15000);
+  const seed = Math.floor(10000 + Math.random() * 90000);
+  const args = [
+    `--fingerprint=${seed}`,
+    "--fingerprint-platform=windows",
+    "--fingerprint-brand=Chrome",
+    "--no-sandbox",
+    `--remote-debugging-port=${port}`,
+    "--remote-debugging-address=127.0.0.1",
+    `--user-data-dir=${profileDir}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    "--disable-component-update",
+    "--disable-sync",
+    "--metrics-recording-only",
+    "--no-pings",
+    "--lang=en-US",
+    "--accept-lang=en-US,en;q=0.9",
+  ];
+  if (process.env.FP_CHROME_HEADLESS === "1") args.push("--headless=new");
+  if (proxyServerUrl) {
+    args.push(`--proxy-server=${proxyServerUrl}`);
+    args.push("--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1");
+  }
+  const child: ChildProcess = spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
+  child.stderr?.on("data", (chunk: Buffer) => {
+    const text = chunk.toString();
+    if (/error|fail|denied|crash/i.test(text) && !/GetVSyncParametersIfAvailable|gpu|sandbox/i.test(text)) {
+      console.error("[fp-chrome]", text.trim().slice(0, 300));
+    }
+  });
+  const cleanup = async () => {
+    try { child.kill("SIGKILL"); } catch { /* 已退出 */ }
+    await sleepMs(500);
+    await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
+  };
+  try {
+    await waitForCdp(port);
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+  const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json() as { webSocketDebuggerUrl?: string };
+  if (!version.webSocketDebuggerUrl) {
+    await cleanup();
+    throw new Error("fingerprint-chromium CDP 未返回 webSocketDebuggerUrl");
+  }
+  return { ws: version.webSocketDebuggerUrl, cleanup };
+}
+
+/** 铸造一枚全新 sherlockToken：有头 + 随机指纹 + 随机代理 IP（铸后删窗口） */
+export async function pullSherlockFromFingerprintChromium(): Promise<string> {
+  // FP_MINT_DIRECT=1：铸造走直连（好 token 不挑铸造 IP，实测 100%），提交仍由代理池负责
+  const node = process.env.FP_MINT_DIRECT === "1" ? null : await randomEnabledProxyEntry();
+  let relay: FpRelay | null = null;
+  let proxyServerUrl = "";
+  if (node) {
+    // SOCKS5 节点走本地中继；HTTP 类节点直传
+    if (node.protocol === "SOCKS5") {
+      relay = await startSocksRelay(node);
+      proxyServerUrl = `http://127.0.0.1:${relay.port}`;
+    } else {
+      proxyServerUrl = httpProxyServerUrl(node);
+    }
+  }
+  const { ws, cleanup } = await launchFpChrome(proxyServerUrl);
+  try {
+    const { default: puppeteer } = await import("puppeteer-core");
     const browser = await puppeteer.connect({ browserWSEndpoint: ws, defaultViewport: null });
     try {
-      const page = (await browser.pages())[0];
-      if (!page.url().startsWith("https://firefly.adobe.com")) {
-        await page.goto("https://firefly.adobe.com/", { waitUntil: "domcontentloaded", timeout: 60_000 });
-      }
-      await page.addScriptTag({ url: "https://commerce.adobe.com/amsterdam/sdk/sherlock.min.js" });
-      // 用字符串形式执行 evaluate，避免 esbuild 把回调转换成引用 __name 的产物（浏览器端无此辅助函数）
+      const page = (await browser.pages())[0] ?? (await browser.newPage());
+      await page.goto(FP_MINT_PAGE, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      await page.addScriptTag({ url: FP_SHERLOCK_SDK });
       const minted = await page.evaluate(`(() => {
         return new Promise((resolve, reject) => {
           let best = null;
@@ -76,10 +184,10 @@ export async function pullSherlockFromRoxyBrowser(): Promise<string> {
             best = t;
             let d = null;
             try { d = JSON.parse(atob(t)); } catch {}
-            if (d && d.sid && d.ftr && d.ark && d.bfp) { clearTimeout(timer); resolve({ token: t, decoded: d }); }
+            if (d && d.sid && d.ftr && d.ark && d.bfp) { clearTimeout(timer); resolve({ token: t }); }
           };
           const timer = setTimeout(() => {
-            if (best) { try { resolve({ token: best, decoded: JSON.parse(atob(best)) }); } catch {} }
+            if (best) { try { const d = JSON.parse(atob(best)); if (d && d.ftr && d.ark && d.bfp) { resolve({ token: best }); return; } } catch {} }
             reject(new Error("sherlock 铸造超时 90s"));
           }, 90000);
           const sdk = window.SherlockSdk;
@@ -94,27 +202,48 @@ export async function pullSherlockFromRoxyBrowser(): Promise<string> {
           });
         });
       })()`);
-      const mintedValue = minted as { token: string };
-      return mintedValue.token;
+      const token = String((minted as { token?: unknown }).token ?? "");
+      if (!token) throw new Error("fingerprint-chromium 未铸出 sherlockToken");
+      // 提交层 UA 与铸造浏览器对齐（worker 进程内生效，降低 408）
+      try {
+        const ua = await page.evaluate(`navigator.userAgent`);
+        if (typeof ua === "string" && ua) process.env.ADOBE_USER_AGENT = ua;
+      } catch { /* 仅尽力而为 */ }
+      return token;
     } finally {
       await browser.disconnect();
-      // 拉取完成立即关闭浏览器窗口，避免常驻占 CPU
-      await fetch(`${config.apiBase}/browser/close`, {
-        method: "POST",
-        headers: { token: config.apiToken, "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, dirId }),
-      }).catch(() => undefined);
     }
   } finally {
-    // 无论成败都先关窗再删窗：Roxy 要求 close 后才能 delete，
-    // 否则 puppeteer.connect 等中间步骤失败时会残留窗口、耗尽窗口额度。
-    await fetch(`${config.apiBase}/browser/close`, {
-      method: "POST",
-      headers: { token: config.apiToken, "Content-Type": "application/json" },
-      body: JSON.stringify({ workspaceId, dirId }),
-    }).catch(() => undefined);
-    await deleteRoxyWindow(config.apiBase, config.apiToken, workspaceId, dirId);
+    await cleanup();
+    if (relay) await relay.close();
   }
+}
+
+/** 远程铸造服务（Docker 一键部署的 mint sidecar）：GET /mint 返回四字段 token */
+async function pullSherlockFromMintApi(): Promise<string> {
+  const base = process.env.SHERLOCK_MINT_API?.trim().replace(/\/$/, "");
+  if (!base) throw new Error("SHERLOCK_MINT_API 未配置");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 170_000);
+  try {
+    const res = await fetch(`${base}/mint`, { signal: controller.signal, headers: { Accept: "application/json" } });
+    const json = (await res.json().catch(() => ({}))) as { status?: string; token?: string; error?: string; ua?: string };
+    if (res.ok && json.token && validateSherlockToken(json.token)) {
+      // 提交层 UA 对齐铸造浏览器（进程内生效）
+      if (json.ua) process.env.ADOBE_USER_AGENT = json.ua;
+      return json.token;
+    }
+    throw new Error(`铸造服务失败(${res.status}): ${json.error ?? "无 token"}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 铸造引擎选择：远程 mint 服务 > 本进程 fingerprint-chromium > 明确报错（RoxyBrowser 已移除） */
+async function pullSherlockPreferred(): Promise<string> {
+  if (process.env.SHERLOCK_MINT_API?.trim()) return await pullSherlockFromMintApi();
+  if (fpChromeBin()) return await pullSherlockFromFingerprintChromium();
+  throw new Error("未配置 sherlockToken 铸造引擎：Docker 部署需 mint 服务(SHERLOCK_MINT_API)；本地开发需 FP_CHROME_BIN 指向 fingerprint-chromium；或后台手动输入 token");
 }
 
 /** 浏览器一行命令产出的 token 校验（base64 JSON 四字段） */
@@ -131,7 +260,7 @@ export function validateSherlockToken(value: string): { sid: string; ftr: string
   }
 }
 
-/** 保存全局 sherlockToken（RoxyBrowser 拉取 / 手动输入 / 导入覆盖共用） */
+/** 保存全局 sherlockToken（自动铸造 / 手动输入 / 导入覆盖共用） */
 export async function saveGlobalSherlockToken(token: string, source: "browser" | "manual"): Promise<Date> {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SHERLOCK_TTL_MS);
@@ -177,9 +306,9 @@ export async function getGlobalSherlockStatus(): Promise<SherlockStatus> {
   };
 }
 
-/** 拉取新 token 并保存全局（worker 定时刷新与手动拉取共用） */
+/** 拉取新 token 并保存全局（worker 定时刷新与手动拉取共用；优先 fingerprint-chromium） */
 export async function refreshGlobalSherlockToken(): Promise<{ token: string; expiresAt: Date }> {
-  const token = await pullSherlockFromRoxyBrowser();
+  const token = await pullSherlockPreferred();
   const expiresAt = await saveGlobalSherlockToken(token, "browser");
   return { token, expiresAt };
 }
@@ -205,73 +334,6 @@ export async function refreshSherlockIfDue(): Promise<{ refreshed: boolean; toke
     return { refreshed: true, token, expiresAt };
   }
   return { refreshed: false };
-}
-
-// ── RoxyBrowser 配置（环境变量，不再写死默认值）──
-// workspaceId / dirId 不再需要手动配置：
-//   workspaceId 通过 GET /browser/workspace 自动获取第一个团队，
-//   dirId 每次铸造前通过 POST /browser/create 自动创建、铸完删除。
-type RoxyConfig = { apiBase: string; apiToken: string; cdpHost: string };
-
-async function getRoxyBrowserConfig(): Promise<RoxyConfig> {
-  const apiBase = process.env.ROXYBROWSER_API_BASE?.trim() || "";
-  const apiToken = process.env.ROXYBROWSER_API_TOKEN?.trim() || "";
-  // 容器内访问宿主机 RoxyBrowser：CDP ws 地址的 127.0.0.1 替换为该值（宿主机局域网 IP，如 192.168.50.80）。
-  // 不能用 host.docker.internal：Docker Desktop 网关对其转发宿主机 CDP 端口会返回 500（实测）。
-  const cdpHost = process.env.ROXYBROWSER_CDP_HOST?.trim() || "";
-
-  const missing: string[] = [];
-  if (!apiBase) missing.push("ROXYBROWSER_API_BASE（Roxy 浏览器 API 地址）");
-  if (!apiToken) missing.push("ROXYBROWSER_API_TOKEN（Roxy 浏览器 API Key）");
-  if (missing.length > 0) {
-    throw new Error(`RoxyBrowser 配置缺失，请在环境变量中设置：${missing.join("、")}`);
-  }
-
-  return { apiBase, apiToken, cdpHost };
-}
-
-/** GET /browser/workspace 自动获取第一个团队（workspace）id */
-async function resolveWorkspaceId(apiBase: string, apiToken: string): Promise<number> {
-  const res = await fetch(`${apiBase}/browser/workspace`, { headers: { token: apiToken } });
-  const json = (await res.json().catch(() => ({}))) as {
-    code?: number;
-    data?: Array<{ id?: number }> | { rows?: Array<{ id?: number }>; total?: number };
-  };
-  // Roxy 新版返回 data.rows[].id，旧版返回 data[].id，两种结构都兼容
-  const list = Array.isArray(json.data) ? json.data : (json.data?.rows ?? []);
-  const id = list[0]?.id;
-  if (!id || !Number.isInteger(id) || id <= 0) {
-    throw new Error("RoxyBrowser 未返回任何团队（workspace），请先在客户端创建团队");
-  }
-  return id;
-}
-
-/** POST /browser/create 自动创建窗口，返回 dirId */
-async function createRoxyWindow(apiBase: string, apiToken: string, workspaceId: number): Promise<string> {
-  const res = await fetch(`${apiBase}/browser/create`, {
-    method: "POST",
-    headers: { token: apiToken, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      workspaceId,
-      windowName: `mint-${Math.random().toString(36).slice(2, 10)}`,
-      coreType: "Chrome",
-      os: "Windows",
-      osVersion: "10",
-    }),
-  });
-  const json = (await res.json().catch(() => ({}))) as { code?: number; data?: { dirId?: string } };
-  const dirId = json.data?.dirId ?? "";
-  if (!dirId) throw new Error("RoxyBrowser create 未返回 dirId");
-  return dirId;
-}
-
-/** POST /browser/delete 删除窗口（铸造完成后清理） */
-async function deleteRoxyWindow(apiBase: string, apiToken: string, workspaceId: number, dirId: string): Promise<void> {
-  await fetch(`${apiBase}/browser/delete`, {
-    method: "POST",
-    headers: { token: apiToken, "Content-Type": "application/json" },
-    body: JSON.stringify({ workspaceId, dirIds: [dirId] }),
-  }).catch(() => undefined);
 }
 
 // 兼容旧引用（按账号存储已废弃，保留空实现避免破坏 import）

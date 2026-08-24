@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "tsx --env-file-if-exists=.env.production src/scripts/start-web.ts",
     "worker": "tsx --env-file-if-exists=.env.development src/worker/index.ts",
+    "mint": "node docker/mint/mint-service.mjs",
     "adobe:spike": "tsx --env-file-if-exists=.env.development src/scripts/transport-spike.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
