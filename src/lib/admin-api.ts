@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { AppError, getRequestId, toErrorResponse } from "@/lib/errors";
 
@@ -30,5 +31,19 @@ export async function requireAdminRequest(request: Request) {
 }
 
 export function handleAdminError(error: unknown, request: Request) {
+  // 管理后台的参数校验失败应明确返回 400，而不是被 toErrorResponse 模糊成 500。
+  if (error instanceof z.ZodError) {
+    return Response.json(
+      {
+        error: {
+          code: "invalid_request",
+          message: "Invalid request parameters",
+          issues: error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
+        },
+        request_id: getRequestId(request),
+      },
+      { status: 400 },
+    );
+  }
   return toErrorResponse(error, getRequestId(request));
 }
