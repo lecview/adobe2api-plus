@@ -76,7 +76,7 @@ cd adobe2api-plus
 docker compose up -d --build
 ```
 
-3. **sherlockToken minting flow (built-in fingerprint-chromium, no Roxy browser needed)**:
+3. **sherlockToken minting flow (built-in fingerprint-chromium)**:
 
 - **Docker one-click deployment (automatic, zero config)**: the built-in `mint` container (fingerprint-chromium 148 + Xvfb, headful) mints tokens; the worker automatically mints a fresh token via mint every 5 minutes and stores it globally — the submission pipeline always carries the latest value, with no external dependencies.
 - **Local development (automatic)**: set `FP_CHROME_BIN` in `.env.development` (start fingerprint-chromium in-process) or `SHERLOCK_MINT_API` (connect to a self-hosted / remote mint service).

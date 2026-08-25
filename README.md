@@ -78,7 +78,7 @@ cd adobe2api-plus
 docker compose up -d --build
 ```
 
-3. **sherlockToken 铸造流程（内置 fingerprint-chromium，无需 Roxy 浏览器）**：
+3. **sherlockToken 铸造流程（内置 fingerprint-chromium）**：
 
 - **Docker 一键部署（自动，无需任何配置）**：内置 `mint` 容器（fingerprint-chromium 148 + Xvfb 有头铸造）。worker 每 5 分钟自动向 mint 铸造新 token 并全局保存，提交链路自动携带最新值，全程无外部依赖。
 - **本地开发（自动）**：`.env.development` 设置 `FP_CHROME_BIN`（本进程直启 fingerprint-chromium 铸造）或 `SHERLOCK_MINT_API`（连接自建/远程 mint 铸造服务）。
