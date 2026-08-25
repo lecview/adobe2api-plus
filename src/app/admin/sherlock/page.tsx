@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Copy, Eye, EyeOff, Loader2, RefreshCw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,6 @@ export default function SherlockAdminPage() {
   const [inputToken, setInputToken] = useState("");
   // 倒计时（秒）：距下次拉取（sherlockRefreshMinutes 周期），每秒递减
   const [countdown, setCountdown] = useState<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -55,19 +54,39 @@ export default function SherlockAdminPage() {
     }
   }, []);
 
-  // 倒计时每秒递减
+  // 倒计时每秒递减；归零后停在 0，由下方轮询 effect 负责恢复
   const hasCountdown = countdown !== null;
   useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (countdown === null) return;
-    timerRef.current = setInterval(() => {
-      setCountdown((current) => {
-        if (current === null || current <= 0) { if (timerRef.current) clearInterval(timerRef.current); return 0; }
-        return current - 1;
-      });
+    if (!hasCountdown) return;
+    const timer = setInterval(() => {
+      setCountdown((current) => (current === null || current <= 0 ? current : current - 1));
     }, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [hasCountdown, countdown]);
+    return () => clearInterval(timer);
+  }, [hasCountdown]);
+
+  // 到期后的自动拉取由 worker 进程执行（页面不触发），落库前服务端一直返回 0。
+  // 归零后每 3s 轮询服务端：worker 拉取完成（sherlockUpdatedAt 重置）后
+  // nextRefreshSeconds 回到新周期值，此时恢复倒计时并同步最新状态。
+  const countdownExpired = countdown === 0;
+  useEffect(() => {
+    if (!countdownExpired) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/admin/sherlock", { credentials: "include", cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as SherlockStatus;
+        if (cancelled || data.nextRefreshSeconds === null || data.nextRefreshSeconds <= 0) return;
+        setStatus(data);
+        setCountdown(data.nextRefreshSeconds);
+      } catch {
+        // 网络抖动忽略，下一轮轮询重试
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 3000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [countdownExpired]);
 
   // 首次加载需要把远端 DB 状态同步到页面；这是该页面唯一的外部数据订阅。
   // eslint-disable-next-line react-hooks/set-state-in-effect
