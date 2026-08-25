@@ -40,7 +40,7 @@ sherlockToken 实测矩阵（铸造方式 × 铸造 IP 类型 → token 质量�
 
 3. **sherlockToken（`x-arp-session-id`）**：维护浏览器会话态，通过内置 [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) 铸造服务（headful + Xvfb）自动铸造或手动输入，由 worker 按固定周期（默认 5 分钟）自动刷新，提交链路自动使用最新 token。
 
-> 因此：**账号供给是唯一瓶颈** —— 第三方模型端点能否使用取决于账号是否被标记，需要干净账号。
+> 因此：在 token 环境质量已由内置 mint 有头铸造保证的前提下，**账号供给是剩余的主要瓶颈** —— 被上游标记的账号即使拿到「好」token 也会 408，需要干净账号。
 
 > 🎁 sherlockToken 由内置 fingerprint-chromium 铸造服务自动维护，Docker 一键部署零配置开箱即用。
 

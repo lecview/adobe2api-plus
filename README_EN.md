@@ -38,7 +38,7 @@ Measured sherlockToken matrix (minting mode × minting IP type → token quality
 
 3. **sherlockToken (`x-arp-session-id`)**: maintains the browser session state, minted by the built-in [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) mint service (headful + Xvfb) or entered manually, auto-refreshed by the worker on a fixed interval (default 5 minutes), and automatically used by the submission pipeline.
 
-> Therefore: **account supply is the only bottleneck** — whether the third-party model endpoint works depends on whether the account is flagged, so clean accounts are required.
+> Therefore: with token quality now guaranteed by the built-in headful mint, **account supply is the main remaining bottleneck** — flagged accounts still get 408 even with a "Good" token, so clean accounts are required.
 
 > 🎁 sherlockToken is minted automatically by the built-in fingerprint-chromium service — zero-config with Docker one-click deployment.
 
