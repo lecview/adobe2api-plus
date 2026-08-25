@@ -19,9 +19,9 @@ Adobe Firefly / OpenAI 兼容网关服务，基于 **Next.js（App Router）+ Ty
 
 ## 408 风控解决原理
 
-Adobe Firefly 的第三方模型端点（`firefly-3p.ff.adobe.io`，承载 GPT / Flux / Gemini 等）在账号被风控标记时会返回 `408`（「system under load」）。实测证明这个 `408` **并非真正的高负载，而是账号级别的风控标记**：
+Adobe Firefly 的第三方模型端点（`firefly-3p.ff.adobe.io`，承载 GPT / Flux / Gemini 等）在提交环境不达标时返回 `408`（「system under load」）。实测证明这个 `408` **并非真正的高负载，也并非账号被标记，而是对提交环境的判定结果**：
 
-1. **根因**：408 与请求体、指纹质量、token 结构、cookie、代理 IP 均无关——唯一决定性变量是账号是否被上游标记。批量注册的池账号（低安全评级 `MedSecNoEV,LowSec`）普遍被标记；正常注册、有使用史的干净账号畅通无阻。
+1. **根因**：408 的开关变量是**提交环境**——即 sherlockToken 质量（由铸造方式 × 铸造 IP 决定），与账号标记无关。环境不达标（HEADLESS、数据中心出口、无 arp / 伪造 arp）→ 恒定 408；有头铸造产出「好」token 之后才会进入正常的账号判定环节。
 
 sherlockToken 实测矩阵（铸造方式 × 铸造 IP 类型 → token 质量）：
 

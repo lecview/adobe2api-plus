@@ -17,9 +17,9 @@ Current design:
 
 ## How We Solved 408 (Risk Control)
 
-Adobe Firefly's third-party model endpoint (`firefly-3p.ff.adobe.io`, serving GPT / Flux / Gemini and others) returns `408` ("system under load") when an account is risk-flagged. Extensive testing proved this `408` is **not actual overload, but account-level risk flagging**:
+Adobe Firefly's third-party model endpoint (`firefly-3p.ff.adobe.io`, serving GPT / Flux / Gemini and others) returns `408` ("system under load") when the submission environment fails its checks. Extensive testing proved this `408` is **not actual overload, and not account risk-flagging — it is a verdict on the submission environment**:
 
-1. **Root cause**: 408 is independent of the request body, fingerprint quality, token structure, cookie, and proxy IP — the only decisive factor is whether the account is flagged upstream. Bulk-registered pool accounts (low security rating `MedSecNoEV,LowSec`) are broadly flagged, while clean accounts (normal registration / real usage history) pass without issue.
+1. **Root cause**: the switch variable behind 408 is the **submission environment** — i.e. sherlockToken quality (determined by minting mode × minting IP), not account flags. A substandard environment (HEADLESS, datacenter egress, missing/forged arp) → 408 every time; once a headful mint produces a "Good" token, the request proceeds to normal account-level evaluation.
 
 Measured sherlockToken matrix (minting mode × minting IP type → token quality):
 
