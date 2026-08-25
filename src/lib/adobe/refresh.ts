@@ -19,10 +19,13 @@ import { getSystemSettings } from "@/lib/system-settings";
 
 const REFRESH_URL = "https://adobeid-na1.services.adobe.com/ims/check/v6/token?jslVersion=v2-v0.48.0-1-g1e322cb";
 const REFRESH_SCOPE = "AdobeID,firefly_api,openid,pps.read,pps.write,additional_info.projectedProductContext,additional_info.ownerOrg,uds_read,uds_write,ab.manage,read_organizations,additional_info.roles,account_cluster.read,creative_production,profile";
-
+// drizzle(mysql2) 的 update/delete/insert 解析为原始结果元组 [ResultSetHeader, FieldPacket[]]，
+// affectedRows 在第 0 个元素上（与 jobs.ts 的 `const [result] = await db.update(...)` 一致）；
+// 直接在元组上读 affectedRows 永远得到 0，导致 claimRefreshProfile 把成功认领判为失败。
 function affectedRows(result: unknown): number {
-  if (!result || typeof result !== "object" || !("affectedRows" in result)) return 0;
-  const value = (result as { affectedRows?: unknown }).affectedRows;
+  const header = Array.isArray(result) ? result[0] : result;
+  if (!header || typeof header !== "object" || !("affectedRows" in header)) return 0;
+  const value = (header as { affectedRows?: unknown }).affectedRows;
   return typeof value === "number" ? value : 0;
 }
 
