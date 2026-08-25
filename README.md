@@ -23,6 +23,17 @@ Adobe Firefly 的第三方模型端点（`firefly-3p.ff.adobe.io`，承载 GPT /
 
 1. **根因**：408 与请求体、指纹质量、token 结构、cookie、代理 IP 均无关——唯一决定性变量是账号是否被上游标记。批量注册的池账号（低安全评级 `MedSecNoEV,LowSec`）普遍被标记；正常注册、有使用史的干净账号畅通无阻。
 
+sherlockToken 实测矩阵（铸造方式 × 铸造 IP 类型 → token 质量）：
+
+| 铸造方式 | 铸造 IP 类型 | token 质量 |
+|---|---|---|
+| HEADED（有头） | 任意（直连数据中心也行） | 好 |
+| HEADLESS + 住宅代理 | 住宅 | 中 |
+| HEADLESS + 直连/数据中心 | 数据中心 | 坏 |
+| 无 arp / 伪造 arp | — | 无 |
+
+> 有头铸造是产出「好」token 的必要条件，因此内置 mint 服务默认 HEADED。
+
 2. **处理策略**：
    - **408 → 自动重铸 sherlockToken 后重试**：提交遇到 408（`timeout_error`）时，不再标记账号风控，立即强制重铸全局 sherlockToken（全新浏览器环境，等同一枚新 token），同账号自动重试（最多 3 次）。每次重铸与重试都会记录在任务的**操作记录**里（`SHERLOCK_REMINT` 事件）。
    - **401 → 彻底删除**：401 表示 token 已失效，直接删除账号（任务历史靠快照保留），与 408 明确区分。

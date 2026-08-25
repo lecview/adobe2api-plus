@@ -21,6 +21,17 @@ Adobe Firefly's third-party model endpoint (`firefly-3p.ff.adobe.io`, serving GP
 
 1. **Root cause**: 408 is independent of the request body, fingerprint quality, token structure, cookie, and proxy IP — the only decisive factor is whether the account is flagged upstream. Bulk-registered pool accounts (low security rating `MedSecNoEV,LowSec`) are broadly flagged, while clean accounts (normal registration / real usage history) pass without issue.
 
+Measured sherlockToken matrix (minting mode × minting IP type → token quality):
+
+| Minting mode | Minting IP type | Token quality |
+|---|---|---|
+| HEADED | Any (direct / datacenter OK) | Good |
+| HEADLESS + residential proxy | Residential | Medium |
+| HEADLESS + direct / datacenter | Datacenter | Bad |
+| No arp / forged arp | — | None |
+
+> Headful minting is required to produce a "Good" token — that's why the built-in mint service defaults to HEADED.
+
 2. **Handling strategy**:
    - **408 → remint sherlockToken, then retry**: on a 408 (`timeout_error`), the account is no longer risk-flagged — instead the global sherlockToken is force-reminted immediately (a fresh browser environment, i.e. a brand-new token) and the submission is retried on the same account (up to 3 attempts). Every remint and retry is recorded in the job's **event log** (`SHERLOCK_REMINT` events).
    - **401 → delete outright**: a 401 means the token is invalid, so the account is deleted (job history is preserved via snapshots), clearly distinguished from 408.
