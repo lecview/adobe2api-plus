@@ -24,7 +24,7 @@ Adobe Firefly 的第三方模型端点（`firefly-3p.ff.adobe.io`，承载 GPT /
 1. **根因**：408 与请求体、指纹质量、token 结构、cookie、代理 IP 均无关——唯一决定性变量是账号是否被上游标记。批量注册的池账号（低安全评级 `MedSecNoEV,LowSec`）普遍被标记；正常注册、有使用史的干净账号畅通无阻。
 
 2. **处理策略**：
-   - **408 → 标记风控，换号重试**：提交遇到 408 时，把该账号标记为「已风控」（从随机选号池中移除，**不删除**），换一个账号重试（最多 3 次）；标记可在后台手动解除。
+   - **408 → 自动重铸 sherlockToken 后重试**：提交遇到 408（`timeout_error`）时，不再标记账号风控，立即强制重铸全局 sherlockToken（全新浏览器环境，等同一枚新 token），同账号自动重试（最多 3 次）。每次重铸与重试都会记录在任务的**操作记录**里（`SHERLOCK_REMINT` 事件）。
    - **401 → 彻底删除**：401 表示 token 已失效，直接删除账号（任务历史靠快照保留），与 408 明确区分。
 
 3. **sherlockToken（`x-arp-session-id`）**：维护浏览器会话态，通过内置 [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) 铸造服务（headful + Xvfb）自动铸造或手动输入，由 worker 按固定周期（默认 5 分钟）自动刷新，提交链路自动使用最新 token。

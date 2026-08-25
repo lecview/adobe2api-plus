@@ -4,6 +4,7 @@ import { adobeToken, entity, generationJob, type AttemptStatus, type JobStage, t
 import { claimNextJob, appendJobEvent, assertJobLease, completeJobWithMedia, completeJobWithResult, finishJobAttempt, recordJobAttempt, releaseJobLease, renewJobLease, transitionJob, updateJobWithLease } from "@/lib/jobs";
 import { AdobeClient, AdobeUpstreamError } from "@/lib/adobe/client";
 import { selectAdobeAccount, selectAdobeGenerationAccount, deleteAdobeAccount, markAdobeTokenFailure, markAdobeTokenSuccess, markAdobeAccountRiskFlagged } from "@/lib/adobe/account";
+import { refreshGlobalSherlockToken } from "@/lib/adobe/sherlock";
 import { accountIdFromToken, queryCreditsUsed } from "@/lib/adobe/refresh";
 import { cleanupReferenceSources, closeReferenceMedia, loadReferenceSources, openReferenceMedia, type ReferenceMedia } from "@/lib/adobe/input";
 import { VIDEO_MODEL_CATALOG, resolveImageModel, resolveVideoModel } from "@/lib/catalog";
@@ -271,7 +272,7 @@ export async function runStage<T>(input: {
   snapshot: ProxySnapshot;
   startIndex: number;
   callback: (proxy: ProxySnapshotEntry | null) => Promise<T>;
-  onRetry?: (error: unknown, disposition: "same_route" | "next_proxy") => Promise<void>;
+  onRetry?: (error: unknown, disposition: "same_route" | "next_proxy", attempts: number) => Promise<void>;
 }) {
   const settings = await getSystemSettings();
   const entries = input.snapshot.mode === "proxy" ? input.snapshot.entries : [];
@@ -306,7 +307,7 @@ export async function runStage<T>(input: {
       if (disposition === "proxy_exhausted") {
         throw new AppError("proxy_exhausted", "All proxy nodes failed for this task", 503, { job_id: input.jobId, stage: input.stage, submission_unknown: input.stage === "SUBMIT" });
       }
-      await input.onRetry?.(error, disposition);
+      await input.onRetry?.(error, disposition, attempts);
 
       const delayMs = settings.retryBackoffMs > 0
         ? Math.min(30_000, settings.retryBackoffMs * 2 ** Math.max(0, attempts - 1))
@@ -454,7 +455,6 @@ export async function processJob(jobId: string, workerId: string, dependencies: 
   let leaseLost = false;
   let loaded: ReferenceMedia[] = [];
   let accountContext: Awaited<ReturnType<typeof selectAdobeGenerationAccount>> | undefined;
-  const attemptedAccountIds = new Set<string>();
   const storedMedia: Array<{ objectKey: string; mimeType: string; byteSize: number; sha256: string }> = [];
 
   try {
@@ -464,7 +464,6 @@ export async function processJob(jobId: string, workerId: string, dependencies: 
     }
     heartbeat = setInterval(() => { void renewJobLease(jobId, workerId).then((ok) => { if (!ok) leaseLost = true; }).catch(() => { leaseLost = true; }); }, Math.max(1000, Math.floor(settings.jobLeaseMs / 3)));
     accountContext = await selectAdobeGenerationAccount(initial.adobeAccountId, initial.id);
-    attemptedAccountIds.add(accountContext.accountId);
     if (accountContext.accountId !== initial.adobeAccountId) await updateJobWithLease(jobId, { adobeAccountId: accountContext.accountId }, workerId);
     await db.update(adobeToken).set({ lastUsedAt: new Date(), updatedAt: new Date() }).where(eq(adobeToken.id, accountContext.tokenId)).catch(() => undefined);
     const payload = requestPayload(initial);
@@ -544,35 +543,28 @@ export async function processJob(jobId: string, workerId: string, dependencies: 
         return;
       }
       if (!upstreamTaskId) {
-        const hasAccountBoundInputs = imageIds.length > 0 || videoIds.length > 0 || audioIds.length > 0 || Boolean(maskId) || entityRefs.length > 0;
-        const accountWasExplicitlySelected = Boolean(initial.adobeAccountId);
-        const submit = await runStage({ jobId, workerId, stage: "SUBMIT", snapshot, startIndex: currentProxyIndex, onRetry: async (error) => {
+        const submit = await runStage({ jobId, workerId, stage: "SUBMIT", snapshot, startIndex: currentProxyIndex, onRetry: async (error, _disposition, attempts) => {
           if (!isExplicitSubmitTimeout(error)) return;
-          // 408 = 账号被 3p 端点风控：标记该账号（不删除），后续选号不再随机到它
-          const flaggedAccountId = accountContext!.accountId;
-          await markAdobeAccountRiskFlagged(flaggedAccountId, "3p 提交 408 timeout_error 风控").catch(() => undefined);
-          // 已上传素材和显式指定账号都与当前 Adobe 身份绑定，不能跨账号重放。
-          // 没有未尝试账号时也直接保留原始 408，避免再次提交已失败账号。
-          if (hasAccountBoundInputs || accountWasExplicitlySelected) throw error;
-          const previousAccountId = accountContext!.accountId;
-          let nextAccount: Awaited<ReturnType<typeof selectAdobeGenerationAccount>>;
+          // 408（timeout_error）≠ 账号风控：不再标记账号。
+          // 立即强制重铸全局 sherlockToken（全新浏览器环境），同账号用新 token 重试；
+          // 尝试次数由 runStage 按 retryMaxAttempts（默认 3）封顶，每次重试都记入任务操作记录。
           try {
-            nextAccount = await selectAdobeGenerationAccount(null, initial.id, attemptedAccountIds);
-          } catch (selectionError) {
-            if (selectionError instanceof AppError && ["adobe_account_unavailable", "adobe_account_concurrency_limit"].includes(selectionError.code)) throw error;
-            throw selectionError;
+            const remint = await refreshGlobalSherlockToken({ fresh: true });
+            accountContext = accountContext ? { ...accountContext, arpSessionId: remint.token } : undefined;
+            await appendJobEvent(jobId, "SHERLOCK_REMINT", {
+              stage: "SUBMIT",
+              retry_reason: "adobe_submit_timeout",
+              token_expires_at: remint.expiresAt.toISOString(),
+              next_attempt_number: attempts + 1,
+            }, workerId);
+          } catch (remintError) {
+            await appendJobEvent(jobId, "SHERLOCK_REMINT_FAILED", {
+              stage: "SUBMIT",
+              retry_reason: "adobe_submit_timeout",
+              error: errorMessage(remintError),
+              next_attempt_number: attempts + 1,
+            }, workerId).catch(() => undefined);
           }
-          accountContext = nextAccount;
-          attemptedAccountIds.add(nextAccount.accountId);
-          await updateJobWithLease(jobId, { adobeAccountId: nextAccount.accountId }, workerId);
-          await db.update(adobeToken).set({ lastUsedAt: new Date(), updatedAt: new Date() }).where(eq(adobeToken.id, nextAccount.tokenId)).catch(() => undefined);
-          await appendJobEvent(jobId, "ACCOUNT_SWITCH", {
-            stage: "SUBMIT",
-            retry_reason: "adobe_submit_timeout",
-            previous_account_id: previousAccountId,
-            next_account_id: nextAccount.accountId,
-            attempted_account_count: attemptedAccountIds.size,
-          }, workerId);
         }, callback: async (proxy) => {
           const context = { token: accountContext!.token, proxy, arpSessionId: accountContext!.arpSessionId };
           if (kind === "video") return client.submitVideo(context, {
@@ -741,10 +733,8 @@ export async function processJob(jobId: string, workerId: string, dependencies: 
         await markAdobeTokenFailure(accountContext.tokenId, errorMessage(error));
       }
     }
-    // 重试耗尽后仍 408：标记账号风控（不删除），后续选号不再随机到该账号
-    if (accountContext && error instanceof AdobeUpstreamError && error.realUpstreamStatus === 408) {
-      await markAdobeAccountRiskFlagged(accountContext.accountId, `提交 408 ${errorMessage(error)}`).catch(() => undefined);
-    }
+    // 408 不再标记账号风控：重铸 sherlockToken 的重试已由提交阶段 onRetry 完成并留痕，
+    // 重试耗尽后的剩余 408 保留为普通任务失败（不污染账号选号池）。
     if (error instanceof AppError && error.code === "job_lease_lost") return;
     // 单账号并发已满：不标记失败，释放任务回队列，等账号空闲后由 Worker 再次领取执行。
     if (error instanceof AppError && error.code === "adobe_account_concurrency_limit") return;

@@ -154,13 +154,15 @@ async function mintOnce() {
   }
 }
 
-/** 单飞串行化：curl 同时在跑多个 mint 时排队复用同一结果 */
-async function mintWithQueue() {
-  if (Date.now() - lastMintAt < CACHE_TTL_MS && lastToken) return { token: lastToken, cached: true };
+/** 单飞串行化：curl 同时在跑多个 mint 时排队复用同一结果；fresh=1 时跳过 60s 缓存强制重铸 */
+async function mintWithQueue(fresh = false) {
+  if (!fresh && Date.now() - lastMintAt < CACHE_TTL_MS && lastToken) return { token: lastToken, cached: true };
   if (minting) {
     queued += 1;
     for (let i = 0; i < 200 && minting; i++) await sleepMs(500);
-    if (Date.now() - lastMintAt < CACHE_TTL_MS && lastToken) return { token: lastToken, cached: true };
+    if (!fresh && Date.now() - lastMintAt < CACHE_TTL_MS && lastToken) return { token: lastToken, cached: true };
+    // fresh=1 且排队等待结束：取刚铸造出的最新 token（不重复抢铸）
+    if (fresh && lastToken) return { token: lastToken, cached: false };
     throw new Error("mint busy timeout");
   }
   minting = true;
@@ -200,9 +202,10 @@ const server = http.createServer(async (req, res) => {
     send(200, { ok: chromeOk, chrome: CHROME_BIN, headless: HEADLESS, lastMintAt: lastMintAt ? new Date(lastMintAt).toISOString() : null, lastError, busy: minting, queued });
     return;
   }
-  if (req.method === "GET" && req.url === "/mint") {
+  if (req.method === "GET" && req.url?.startsWith("/mint")) {
     try {
-      const result = await Promise.race([mintWithQueue(), sleepMs(MINT_TIMEOUT_MS).then(() => Promise.reject(new Error("mint timeout 150s")))]);
+      const fresh = new URL(req.url, "http://127.0.0.1").searchParams.get("fresh") === "1";
+      const result = await Promise.race([mintWithQueue(fresh), sleepMs(MINT_TIMEOUT_MS).then(() => Promise.reject(new Error("mint timeout 150s")))]);
       send(200, { status: "ok", token: result.token, cached: Boolean(result.cached), expires_in_seconds: 1800 });
     } catch (error) {
       send(503, { status: "error", error: error instanceof Error ? error.message : String(error) });

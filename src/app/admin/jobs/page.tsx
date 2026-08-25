@@ -94,6 +94,8 @@ const eventLabels: Record<string, string> = {
   SUBMISSION_UNKNOWN: "提交结果待确认",
   PROXY_SWITCH: "切换代理",
   POLL_PROGRESS: "Adobe 生成进度",
+  SHERLOCK_REMINT: "重铸 sherlockToken（408 后重试）",
+  SHERLOCK_REMINT_FAILED: "sherlockToken 重铸失败",
 };
 
 /** 请求日志中的错误码 → 管理员可理解的中文说明。 */

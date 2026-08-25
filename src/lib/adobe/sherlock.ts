@@ -219,14 +219,14 @@ export async function pullSherlockFromFingerprintChromium(): Promise<string> {
   }
 }
 
-/** 远程铸造服务（Docker 一键部署的 mint sidecar）：GET /mint 返回四字段 token */
-async function pullSherlockFromMintApi(): Promise<string> {
+/** 远程铸造服务（Docker 一键部署的 mint sidecar）：GET /mint 返回四字段 token；fresh=1 时跳过 mint 的 60s 缓存强制重铸 */
+async function pullSherlockFromMintApi(options: { fresh?: boolean } = {}): Promise<string> {
   const base = process.env.SHERLOCK_MINT_API?.trim().replace(/\/$/, "");
   if (!base) throw new Error("SHERLOCK_MINT_API 未配置");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 170_000);
   try {
-    const res = await fetch(`${base}/mint`, { signal: controller.signal, headers: { Accept: "application/json" } });
+    const res = await fetch(`${base}/mint${options.fresh ? "?fresh=1" : ""}`, { signal: controller.signal, headers: { Accept: "application/json" } });
     const json = (await res.json().catch(() => ({}))) as { status?: string; token?: string; error?: string; ua?: string };
     if (res.ok && json.token && validateSherlockToken(json.token)) {
       // 提交层 UA 对齐铸造浏览器（进程内生效）
@@ -240,8 +240,8 @@ async function pullSherlockFromMintApi(): Promise<string> {
 }
 
 /** 铸造引擎选择：远程 mint 服务 > 本进程 fingerprint-chromium > 明确报错（RoxyBrowser 已移除） */
-async function pullSherlockPreferred(): Promise<string> {
-  if (process.env.SHERLOCK_MINT_API?.trim()) return await pullSherlockFromMintApi();
+async function pullSherlockPreferred(options: { fresh?: boolean } = {}): Promise<string> {
+  if (process.env.SHERLOCK_MINT_API?.trim()) return await pullSherlockFromMintApi(options);
   if (fpChromeBin()) return await pullSherlockFromFingerprintChromium();
   throw new Error("未配置 sherlockToken 铸造引擎：Docker 部署需 mint 服务(SHERLOCK_MINT_API)；本地开发需 FP_CHROME_BIN 指向 fingerprint-chromium；或后台手动输入 token");
 }
@@ -306,9 +306,9 @@ export async function getGlobalSherlockStatus(): Promise<SherlockStatus> {
   };
 }
 
-/** 拉取新 token 并保存全局（worker 定时刷新与手动拉取共用；优先 fingerprint-chromium） */
-export async function refreshGlobalSherlockToken(): Promise<{ token: string; expiresAt: Date }> {
-  const token = await pullSherlockPreferred();
+/** 拉取新 token 并保存全局（worker 定时刷新与手动拉取共用；fresh=1 时强制重铸，用于 408 重试恢复） */
+export async function refreshGlobalSherlockToken(options: { fresh?: boolean } = {}): Promise<{ token: string; expiresAt: Date }> {
+  const token = await pullSherlockPreferred(options);
   const expiresAt = await saveGlobalSherlockToken(token, "browser");
   return { token, expiresAt };
 }

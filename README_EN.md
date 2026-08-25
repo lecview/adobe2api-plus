@@ -22,7 +22,7 @@ Adobe Firefly's third-party model endpoint (`firefly-3p.ff.adobe.io`, serving GP
 1. **Root cause**: 408 is independent of the request body, fingerprint quality, token structure, cookie, and proxy IP — the only decisive factor is whether the account is flagged upstream. Bulk-registered pool accounts (low security rating `MedSecNoEV,LowSec`) are broadly flagged, while clean accounts (normal registration / real usage history) pass without issue.
 
 2. **Handling strategy**:
-   - **408 → flag as risk-controlled, rotate accounts**: on a 408, mark that account "risk-flagged" (removed from the random selection pool, **not deleted**) and retry with another account (up to 3 attempts); the flag can be manually cleared in the admin console.
+   - **408 → remint sherlockToken, then retry**: on a 408 (`timeout_error`), the account is no longer risk-flagged — instead the global sherlockToken is force-reminted immediately (a fresh browser environment, i.e. a brand-new token) and the submission is retried on the same account (up to 3 attempts). Every remint and retry is recorded in the job's **event log** (`SHERLOCK_REMINT` events).
    - **401 → delete outright**: a 401 means the token is invalid, so the account is deleted (job history is preserved via snapshots), clearly distinguished from 408.
 
 3. **sherlockToken (`x-arp-session-id`)**: maintains the browser session state, minted by the built-in [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) mint service (headful + Xvfb) or entered manually, auto-refreshed by the worker on a fixed interval (default 5 minutes), and automatically used by the submission pipeline.
