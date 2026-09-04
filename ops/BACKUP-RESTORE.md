@@ -5,7 +5,9 @@ Last updated: 2026-09-04 13:56 (Asia/Shanghai).
 ## Recorded deployment backups
 
 - Local pre-deployment evidence: `E:\APP\codex\主机维护\KR主机\adobe2api-plus\backups\kr-predeploy-20260904-121508`.
+- Local post-deployment evidence: `E:\APP\codex\主机维护\KR主机\adobe2api-plus\backups\kr-postdeploy-20260904-135620`.
 - Server pre-deployment evidence: `/opt/adobe2api-plus/backups/kr-predeploy-20260904-121508`.
+- Server post-deployment evidence: `/opt/adobe2api-plus/backups/kr-postdeploy-20260904-135620`.
 - Internal-network correction and before/after Compose files: `/opt/adobe2api-plus/backups/internal-network-fix-20260904-134659`.
 - Nginx target-absence marker and pre-security-header-fix site: `/opt/adobe2api-plus/backups/nginx-install-20260904-134815`.
 - DNS pre-operation response: `/opt/adobe2api-plus/backups/adobe2api.aimasker.com-before-create-20260904T055308Z.json` (mode `0600`).

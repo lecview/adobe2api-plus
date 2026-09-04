@@ -37,5 +37,5 @@ Last updated: 2026-09-04 13:56 (Asia/Shanghai).
 - Restart recovery preserved one admin and one session; Adobe accounts, Adobe tokens and jobs remained zero. Log pattern scan found no credentials and no Web error/fatal patterns.
 - Sub2API remained version `0.2.0` / commit `aa236488351eb71e120fc2b6fb32e36b0374c918`; all three existing containers stayed healthy, `127.0.0.1:8081` and its Docker network were unchanged, and the enabled Sub2API Nginx file retained SHA-256 `7e919a67baf4660ccd25425d1b9be5c093d6c62686f61587638b0f9152677048`.
 
-See `DEPLOYMENT.md` for immutable build data and upgrade procedure. Read `BACKUP-RESTORE.md` before rollback or restore.
+See `DEPLOYMENT.md` for immutable build data and upgrade procedure, and `GITHUB-RECEIPT.md` for the two-repository publication record. Read `BACKUP-RESTORE.md` before rollback or restore.
 
