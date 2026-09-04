@@ -145,8 +145,8 @@ export async function POST(request: Request, { params }: { params: Promise<unkno
     const modelName = canonicalProtocolModelId(decodeURIComponent(match[1]!), body, "gemini") ?? decodeURIComponent(match[1]!);
     const requestedCount = candidateCount(body);
     const input = { ...normalizeGeminiRequest(modelName, body), n: requestedCount };
-    await validateReferenceUrls(input, input.kind === "video" ? referenceLimitsForVideo(VIDEO_MODEL_CATALOG[input.model]) : { total: 4, image: 4, video: 0, audio: 0 });
-    const job = await enqueueGeneration({ apiPath: `/v1beta/models/${modelName}:${match[2]}`, model: input.model, payload: input });
+    await validateReferenceUrls(input, input.kind === "video" ? referenceLimitsForVideo(VIDEO_MODEL_CATALOG[input.resolved_model]) : { total: 4, image: 4, video: 0, audio: 0 });
+    const job = await enqueueGeneration({ apiPath: `/v1beta/models/${modelName}:${match[2]}`, model: input.requested_model, payload: input });
     if (match[2] === "streamGenerateContent") return geminiStream(request, job.id, requestId, requestedCount);
     const result = await waitForGeneration(job.id);
     return Response.json(await geminiPayload(request, result, requestedCount), { headers: { "x-request-id": requestId } });

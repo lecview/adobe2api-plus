@@ -3,6 +3,7 @@ import { readMediaBytes } from "@/lib/media";
 import { fileToDataUrl, isVideoRequested, responseModalitiesFromBody } from "@/lib/media-request";
 import { inferMediaMimeFromUrl } from "@/lib/ssrf";
 import { IMAGE_MODEL_CATALOG, VIDEO_MODEL_CATALOG, isSeedanceProviderAlias, isVideoProviderAlias } from "@/lib/catalog";
+import { normalizePublicModelId } from "@/lib/media-model-routing";
 
 export type MediaRecord = { objectKey: string; url?: string | null; mimeType: string };
 
@@ -194,6 +195,9 @@ export function canonicalProtocolModelId(value: unknown, body: unknown, protocol
   const bodyRecord = objectBody(body);
   const exact = existingModel(candidate);
   if (exact) return exact;
+  const publicFamily = normalizePublicModelId(candidate);
+  const publicCandidate = candidate.toLowerCase().replace(/^firefly-/, "");
+  if (publicFamily && ["gpt-image-2", "nano-banana", "nano-banana-pro", "nano-banana2", "sora2", "sora2-pro", "veo31", "veo31-ref", "gemini-omni", "kling3", "kling-o3", "seedance20", "seedance20-fast"].includes(publicCandidate)) return publicFamily;
   const responseModalities = responseModalitiesFromBody(bodyRecord);
   const explicitlyVideo = isVideoRequested(bodyRecord) || responseModalities.some((item) => item.includes("video"));
   if (protocol === "image" || (protocol === "gemini" && !explicitlyVideo && !isVideoProviderAlias(candidate) && !/veo|omni|video|seedance|kling|sora/i.test(candidate))) {
@@ -302,4 +306,3 @@ export function jobStatusForVideo(status: string): "queued" | "in_progress" | "c
   if (status === "QUEUED") return "queued";
   return "in_progress";
 }
-

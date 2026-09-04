@@ -7,7 +7,7 @@ describe("media response protocol compatibility", () => {
     expect(canonicalProtocolModelId("seedance", { duration: 5, aspect_ratio: "16:9", resolution: "1080p" }, "video")).toBe("seedance20-5s-16x9-1080p");
     expect(canonicalProtocolModelId("seedance-fast", { durationSeconds: 15, aspectRatio: "3:4", videoResolution: "1080p" }, "video")).toBe("seedance20-fast-15s-3x4-1080p");
     expect(canonicalProtocolModelId("sora", { seconds: 8, size: "1920x1080" }, "video")).toBe("sora2-8s-16x9");
-    expect(canonicalProtocolModelId("kling-o3", { duration: 15, aspect_ratio: "9:16" }, "video")).toBe("kling-o3-15s-9x16");
+    expect(canonicalProtocolModelId("kling-o3", { duration: 15, aspect_ratio: "9:16" }, "video")).toBe("kling-o3");
     expect(canonicalProtocolModelId("gemini-2.5-flash", { generationConfig: { responseModalities: ["VIDEO"] }, duration: 8 }, "gemini")).toBe("gemini-omni-8s-16x9-720p");
   });
 

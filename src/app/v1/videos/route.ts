@@ -17,8 +17,8 @@ export async function POST(request: Request) {
   try {
     await requireServiceApiKey(request);
     const input = normalizeVideoRequest(await parseBody(request), "sora");
-    await validateReferenceUrls(input, referenceLimitsForVideo(VIDEO_MODEL_CATALOG[input.model]));
-    const job = await enqueueGeneration({ apiPath: new URL(request.url).pathname, model: input.model, payload: input });
+    await validateReferenceUrls(input, referenceLimitsForVideo(VIDEO_MODEL_CATALOG[input.resolved_model]));
+    const job = await enqueueGeneration({ apiPath: new URL(request.url).pathname, model: input.requested_model, payload: input });
     const task = await findVideoJob(job.id);
     return Response.json(await videoObject(request, task), { status: 202, headers: { "x-request-id": requestId } });
   } catch (error) {

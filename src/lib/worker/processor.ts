@@ -18,6 +18,10 @@ import type { ImageProviderOptions, VideoProviderOptions } from "@/lib/media-req
 
 type JobPayload = Record<string, unknown> & { __adobe_source_ids?: { images?: string[]; videos?: string[]; audios?: string[]; maskId?: string; mask?: string } };
 
+export function executionModelId(payload: Record<string, unknown>, historicalModel?: string | null): string {
+  return String(payload.resolved_model ?? payload.resolvedModel ?? historicalModel ?? payload.model ?? "");
+}
+
 function snapshotFromJson(value: unknown): ProxySnapshot {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { mode: "direct", entries: [], selectedIndex: -1 };
   const candidate = value as Partial<ProxySnapshot>;
@@ -469,7 +473,9 @@ export async function processJob(jobId: string, workerId: string, dependencies: 
     const payload = requestPayload(initial);
     const [entityRow] = initial.entityId ? await db.select({ name: entity.name, upstreamId: entity.upstreamId }).from(entity).where(eq(entity.id, initial.entityId)).limit(1) : [];
     const entityRefs = entityRow?.upstreamId ? [{ urn: entityRow.upstreamId, mention_id: entityRow.name }] : [];
-    const modelId = initial.model ?? String(payload.model ?? "");
+    // New jobs use the internal resolved variant; historical jobs fall back
+    // to the previously persisted job.model value.
+    const modelId = executionModelId(payload, initial.model);
     const requestedKind = payload.kind === "video" || payload.kind === "image" ? payload.kind : undefined;
     const videoModel = requestedKind === "video" ? resolveVideoModel(modelId) : VIDEO_MODEL_CATALOG[modelId];
     const kind: "image" | "video" = requestedKind ?? (videoModel ? "video" : "image");
@@ -786,4 +792,3 @@ export async function processOne(workerId: string): Promise<boolean> {
   await processJob(job.id, workerId);
   return true;
 }
-
