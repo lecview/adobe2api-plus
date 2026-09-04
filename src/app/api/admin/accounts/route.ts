@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { and, asc, count, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { adobeAccount, adobeToken, entity, generationJob, refreshProfile, type AdobeTokenStatus, type RefreshProfileStatus } from "@/lib/db/schema";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { requireAdminRequest, handleAdminError } from "@/lib/admin-api";
 import { AppError, getRequestId, safeErrorMessage, statusForErrorCode } from "@/lib/errors";
-import { creditFailureMessage, refreshProfileNow, refreshTokenCredits, refreshTokenCreditsBatch, setRefreshProfileEnabled } from "@/lib/adobe/refresh";
+import { creditFailureMessage, refreshTokenCredits, refreshTokenCreditsBatch, setRefreshProfileEnabled } from "@/lib/adobe/refresh";
 import { unmarkAdobeAccountRiskFlagged } from "@/lib/adobe/account";
 import { allocateProxySnapshot, getProxySettings } from "@/lib/proxy-pool";
 import { getSystemSettings } from "@/lib/system-settings";
@@ -329,7 +329,22 @@ async function upsertManualToken(value: string, overrides: AccountImport = {}) {
 async function createRefreshProfile(value: CookieImport, options: { accountId?: string; externalAccountId?: string; email?: string } = {}) {
   const existing = await db.select({ id: refreshProfile.id, accountId: refreshProfile.accountId, encryptedCookie: refreshProfile.encryptedCookie }).from(refreshProfile);
   for (const candidate of existing) {
-    try { if (decryptSecret(candidate.encryptedCookie) === value.cookie) return { id: candidate.id, accountId: candidate.accountId, duplicate: true }; }
+    try {
+      if (decryptSecret(candidate.encryptedCookie) === value.cookie) {
+        await db.update(refreshProfile).set({
+          name: value.name || null,
+          status: "ACTIVE",
+          enabled: true,
+          nextRefreshAt: null,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          lastError: null,
+          updatedAt: new Date(),
+        }).where(eq(refreshProfile.id, candidate.id));
+        await db.update(adobeAccount).set({ status: "AVAILABLE", updatedAt: new Date() }).where(eq(adobeAccount.id, candidate.accountId));
+        return { id: candidate.id, accountId: candidate.accountId, duplicate: true };
+      }
+    }
     catch { /* 损坏的旧密文不阻塞其他 Cookie 导入 */ }
   }
   let resolvedAccount = options.accountId
@@ -339,6 +354,23 @@ async function createRefreshProfile(value: CookieImport, options: { accountId?: 
   if (!resolvedAccount && options.email) {
     const [byEmail] = await db.select().from(adobeAccount).where(eq(adobeAccount.email, options.email)).limit(1);
     resolvedAccount = byEmail ?? null;
+  }
+  // 单 Cookie 导入通常没有 email/externalId，且 Cookie 自身会随登录刷新而变化。
+  // 复用最近一次匿名 Cookie 档案，避免每次导入都制造一个无法识别的空账号。
+  // 如需维护多个账号，可填写稳定名称；同名档案会定向覆盖。
+  if (!resolvedAccount && !options.email && !options.externalAccountId) {
+    const [anonymous] = await db
+      .select({ account: adobeAccount })
+      .from(refreshProfile)
+      .innerJoin(adobeAccount, eq(adobeAccount.id, refreshProfile.accountId))
+      .where(and(
+        isNull(adobeAccount.email),
+        isNull(adobeAccount.externalId),
+        value.name ? eq(adobeAccount.displayName, value.name) : undefined,
+      ))
+      .orderBy(desc(refreshProfile.updatedAt))
+      .limit(1);
+    resolvedAccount = anonymous?.account ?? null;
   }
   if (!resolvedAccount) {
     const accountId = randomUUID();
@@ -594,12 +626,15 @@ export async function POST(request: Request) {
     const action = input.action?.trim().toLowerCase();
     if (action === "refresh-token") {
       const tokenId = input.tokenId ?? input.id;
-      if (!tokenId) throw new AppError("token_id_required", "tokenId is required", 400);
-      const [token] = await db.select({ refreshProfileId: adobeToken.refreshProfileId }).from(adobeToken).where(eq(adobeToken.id, tokenId)).limit(1);
-      if (!token) throw new AppError("token_not_found", "Token not found", 404);
-      if (!token.refreshProfileId) throw new AppError("refresh_profile_not_bound", "This token is not bound to an auto refresh profile", 400);
-      const refreshed = await refreshProfileNow(token.refreshProfileId);
-      return Response.json({ status: refreshed ? "ok" : "failed", tokenId, ...(refreshed ? { token: await mapToken(tokenId) } : {}), request_id: getRequestId(request) });
+      let profileId = input.profileId;
+      if (tokenId && !profileId) {
+        const [token] = await db.select({ refreshProfileId: adobeToken.refreshProfileId }).from(adobeToken).where(eq(adobeToken.id, tokenId)).limit(1);
+        if (!token) throw new AppError("token_not_found", "Token not found", 404);
+        profileId = token.refreshProfileId ?? undefined;
+      }
+      if (!profileId) throw new AppError("refresh_profile_not_bound", "This account is not bound to an auto refresh profile", 400);
+      await queueRefresh(profileId);
+      return Response.json({ status: "pending", tokenId, profileId, request_id: getRequestId(request) });
     }
     if (action === "unmark-risk") {
       const accountId = input.accountId ?? input.id;

@@ -72,6 +72,7 @@ type TokenRow = {
   remainingSeconds: number | null;
   isExpired: boolean;
   createdAt: string;
+  hasToken: boolean;
 };
 
 type TokenAction = "refresh-token" | "refresh-credits" | "toggle" | "delete" | "unmark-risk";
@@ -146,7 +147,7 @@ function formatBeijingDate(value: string | null | undefined) {
 }
 
 function statusText(status: string) {
-  return ({ active: "生效", disabled: "已禁用", exhausted: "额度耗尽", invalid: "无效", expired: "已过期", revoked: "已撤销" } as Record<string, string>)[status] ?? status;
+  return ({ active: "生效", pending: "待刷新", disabled: "已禁用", exhausted: "额度耗尽", invalid: "无效", expired: "已过期", revoked: "已撤销" } as Record<string, string>)[status] ?? status;
 }
 
 function formatCredits(value: number | null) {
@@ -239,15 +240,51 @@ export default function AccountsPage() {
       const response = await fetch("/api/admin/accounts", { cache: "no-store" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error?.message ?? "账号列表加载失败");
-      setTokens((data.tokens ?? []).map((token: Record<string, unknown>) => ({
+      const tokenRows = (data.tokens ?? []).map((token: Record<string, unknown>) => ({
         ...token,
+        hasToken: true,
         riskFlagged: Boolean(token.riskFlagged),
         riskFlaggedAt: typeof token.riskFlaggedAt === "string" ? token.riskFlaggedAt : null,
         riskFlaggedReason: typeof token.riskFlaggedReason === "string" ? token.riskFlaggedReason : null,
-      }) as TokenRow));
+      }) as TokenRow);
+      const tokenAccountIds = new Set(tokenRows.map((token: TokenRow) => token.accountId));
+      const pendingRows = (Array.isArray(data.accounts) ? data.accounts : [])
+        .filter((account: Record<string, unknown>) => !tokenAccountIds.has(String(account.id ?? "")))
+        .map((account: Record<string, unknown>) => {
+          const profiles = Array.isArray(account.refreshProfileDetails) ? account.refreshProfileDetails as Array<Record<string, unknown>> : [];
+          const profile = profiles[0];
+          return {
+            id: `pending:${String(account.id ?? "")}`,
+            accountId: String(account.id ?? ""),
+            accountName: String(account.displayName ?? "Cookie 账号"),
+            accountEmail: typeof account.email === "string" ? account.email : null,
+            status: profile ? "pending" : String(account.status ?? "unavailable").toLowerCase(),
+            source: profile ? "auto_refresh" : "manual",
+            fails: Number(profile?.consecutiveFailures ?? 0),
+            autoRefresh: Boolean(profile?.enabled),
+            autoRefreshEnabled: Boolean(profile?.enabled),
+            refreshProfileId: typeof profile?.id === "string" ? profile.id : null,
+            refreshProfileName: typeof profile?.name === "string" ? profile.name : null,
+            creditsTotal: null,
+            creditsUsed: null,
+            creditsAvailable: null,
+            creditsAvailableUntil: null,
+            creditsError: typeof profile?.lastError === "string" ? profile.lastError : null,
+            riskFlagged: false,
+            riskFlaggedAt: null,
+            riskFlaggedReason: null,
+            expiresAtText: null,
+            remainingSeconds: null,
+            isExpired: false,
+            createdAt: "",
+            hasToken: false,
+          } as TokenRow;
+        });
+      const displayRows = [...tokenRows, ...pendingRows];
+      setTokens(displayRows);
       setSummary(data.summary ?? { total: 0, active: 0, creditsAvailableTotal: 0 });
-      setSelected((current) => new Set([...current].filter((id) => (data.tokens ?? []).some((token: TokenRow) => token.id === id))));
-      setPage((current) => Math.min(current, Math.max(1, Math.ceil((data.tokens ?? []).length / pageSize))));
+      setSelected((current) => new Set([...current].filter((id) => displayRows.some((token: TokenRow) => token.id === id && token.hasToken))));
+      setPage((current) => Math.min(current, Math.max(1, Math.ceil(displayRows.length / pageSize))));
     } catch (loadError) {
       toast.error(loadError instanceof Error ? loadError.message : "账号列表加载失败");
     } finally { setLoading(false); }
@@ -498,7 +535,7 @@ export default function AccountsPage() {
 
   async function toggleAutoRefresh(token: TokenRow) {
     if (!token.refreshProfileId) return;
-    const data = await request("PATCH", { tokenId: token.id, profileId: token.refreshProfileId, autoRefreshEnabled: !token.autoRefreshEnabled }, token.id, "toggle");
+    const data = await request("PATCH", { ...(token.hasToken ? { tokenId: token.id } : {}), profileId: token.refreshProfileId, autoRefreshEnabled: !token.autoRefreshEnabled }, token.id, "toggle");
     if (data) {
       const updatedToken = data.token && typeof data.token === "object" ? data.token as Partial<TokenRow> : { autoRefreshEnabled: !token.autoRefreshEnabled, autoRefresh: !token.autoRefreshEnabled };
       setTokens((current) => current.map((item) => item.id === token.id ? { ...item, ...updatedToken } : item));
@@ -686,16 +723,17 @@ export default function AccountsPage() {
       return;
     }
     void (async () => {
-      const data = await request("POST", { action: "refresh-token", tokenId: token.id }, token.id, "refresh-token");
+      const data = await request("POST", { action: "refresh-token", ...(token.hasToken ? { tokenId: token.id } : {}), profileId: token.refreshProfileId }, token.id, "refresh-token");
       if (!data) return;
-      if (data.status !== "ok") {
+      if (data.status !== "ok" && data.status !== "pending") {
         toast.error("Token 刷新失败");
         return;
       }
       if (data.token && typeof data.token === "object") {
         setTokens((current) => current.map((item) => item.id === token.id ? { ...item, ...data.token } : item));
       }
-      toast.success("Token 刷新完成");
+      toast.success(data.status === "pending" ? "Token 刷新已加入 Worker 队列" : "Token 刷新完成");
+      if (data.status === "pending") window.setTimeout(() => void load(), 1500);
     })();
   }
 
@@ -756,7 +794,7 @@ export default function AccountsPage() {
             <TableBody>
               {visibleTokens.length ? visibleTokens.map((token) => (
                 <TableRow key={token.id}>
-                  <TableCell className="account-table-checkbox-cell"><input type="checkbox" aria-label={`选择 ${token.accountName}`} checked={selected.has(token.id)} onChange={(event) => toggleSelected(token.id, event.target.checked)} /></TableCell>
+                  <TableCell className="account-table-checkbox-cell"><input type="checkbox" aria-label={`选择 ${token.accountName}`} disabled={!token.hasToken} checked={selected.has(token.id)} onChange={(event) => toggleSelected(token.id, event.target.checked)} /></TableCell>
                   <TableCell><strong>{token.accountName || "手动 Token"}</strong><small>{token.accountEmail || token.accountId}</small></TableCell>
                   <TableCell><span className={`admin-status admin-status-${token.status}`}>{statusText(token.status)}</span></TableCell>
                   <TableCell>{token.riskFlagged ? <div className="account-risk-cell"><Tooltip><TooltipTrigger asChild><span className="admin-status admin-status-failed" style={{ cursor: "help" }}>已风控</span></TooltipTrigger><TooltipContent>{token.riskFlaggedReason ?? "3p 提交 408 风控"}（{formatBeijingDate(token.riskFlaggedAt) ?? ""}）</TooltipContent></Tooltip><Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button" aria-label="解除风控" disabled={busy || Boolean(busyTokenActions[token.id])} onClick={() => void unmarkRisk(token)}>{busyTokenActions[token.id] === "unmark-risk" ? <Loader2 className="account-action-spinner" size={13} aria-hidden="true" /> : <ShieldOff size={13} aria-hidden="true" />}</button></TooltipTrigger><TooltipContent>解除风控</TooltipContent></Tooltip></div> : <span className="admin-muted">—</span>}</TableCell>
@@ -766,9 +804,9 @@ export default function AccountsPage() {
                   <TableCell><span className={token.isExpired ? "account-expired" : ""}>{formatRemaining(token.remainingSeconds, token.isExpired)}</span><small>{formatBeijingDate(token.expiresAtText) ?? "无过期时间"}</small></TableCell>
                   <TableCell><div className="admin-table-actions">
                     {token.refreshProfileId ? <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button" aria-label="刷新 Token" disabled={busy || Boolean(busyTokenActions[token.id])} onClick={() => refreshToken(token)}>{busyTokenActions[token.id] === "refresh-token" ? <Loader2 className="account-action-spinner" size={16} aria-hidden="true" /> : <RefreshCw size={16} aria-hidden="true" />}</button></TooltipTrigger><TooltipContent>刷新 Token</TooltipContent></Tooltip> : null}
-                    <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button" aria-label="刷新积分" disabled={busy || Boolean(busyTokenActions[token.id])} onClick={() => void runAction({ action: "refresh-credits", tokenId: token.id }, "积分刷新完成")}>{busyTokenActions[token.id] === "refresh-credits" ? <Loader2 className="account-action-spinner" size={16} aria-hidden="true" /> : <Coins size={16} aria-hidden="true" />}</button></TooltipTrigger><TooltipContent>刷新积分</TooltipContent></Tooltip>
-                    <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button" aria-label="导出账号" disabled={busy || Boolean(busyTokenActions[token.id])} onClick={() => void exportAccount(token)}><Download size={16} aria-hidden="true" /></button></TooltipTrigger><TooltipContent>导出账号（导入格式 JSON）</TooltipContent></Tooltip>
-                    <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button admin-icon-button-danger" aria-label="删除 Token" onClick={() => setDeleteTarget(token)} disabled={busy || Boolean(busyTokenActions[token.id])}><Trash2 size={16} aria-hidden="true" /></button></TooltipTrigger><TooltipContent>删除 Token</TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button" aria-label="刷新积分" disabled={!token.hasToken || busy || Boolean(busyTokenActions[token.id])} onClick={() => void runAction({ action: "refresh-credits", tokenId: token.id }, "积分刷新完成")}>{busyTokenActions[token.id] === "refresh-credits" ? <Loader2 className="account-action-spinner" size={16} aria-hidden="true" /> : <Coins size={16} aria-hidden="true" />}</button></TooltipTrigger><TooltipContent>刷新积分</TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button" aria-label="导出账号" disabled={!token.hasToken || busy || Boolean(busyTokenActions[token.id])} onClick={() => void exportAccount(token)}><Download size={16} aria-hidden="true" /></button></TooltipTrigger><TooltipContent>导出账号（导入格式 JSON）</TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button admin-icon-button-danger" aria-label="删除 Token" onClick={() => setDeleteTarget(token)} disabled={!token.hasToken || busy || Boolean(busyTokenActions[token.id])}><Trash2 size={16} aria-hidden="true" /></button></TooltipTrigger><TooltipContent>删除 Token</TooltipContent></Tooltip>
                   </div></TableCell>
                 </TableRow>
               )) : <TableRow><TableCell colSpan={9} className="account-table-empty">暂无账号，请点击上方“新增账号”。</TableCell></TableRow>}
@@ -973,3 +1011,4 @@ export default function AccountsPage() {
     </div>
   );
 }
+

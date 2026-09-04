@@ -165,9 +165,14 @@ export async function selectAdobeGenerationAccount(
     .orderBy(desc(adobeToken.updatedAt), desc(refreshProfile.updatedAt));
 
   let globalToken = "";
+  let globalTokenPresent = false;
+  let globalTokenExpired = false;
   try {
     const { getGlobalSherlockStatus } = await import("@/lib/adobe/sherlock");
-    globalToken = (await getGlobalSherlockStatus()).token?.trim() ?? "";
+    const globalStatus = await getGlobalSherlockStatus();
+    globalTokenPresent = Boolean(globalStatus.token?.trim());
+    globalTokenExpired = globalTokenPresent && (globalStatus.remainingSeconds ?? 0) <= 0;
+    globalToken = globalTokenExpired ? "" : globalStatus.token?.trim() ?? "";
   } catch {
     // 全局单例不可用时，下方仍可回退到账号自身 Cookie。
   }
@@ -184,7 +189,9 @@ export async function selectAdobeGenerationAccount(
     )) continue;
     try {
       const token = decryptSecret(row.encryptedAccessToken);
-      const arpSessionId = globalToken || (row.encryptedCookie ? completeSherlockFromCookie(decryptSecret(row.encryptedCookie)) : "");
+      // 已配置但过期的全局 Sherlock 不得再回退到 Cookie 内无法判断时效的旧值，
+      // 否则上传会成功、提交阶段却被 Adobe 401，并误判成账号 Access Token 失效。
+      const arpSessionId = globalToken || (!globalTokenPresent && row.encryptedCookie ? completeSherlockFromCookie(decryptSecret(row.encryptedCookie)) : "");
       if (!arpSessionId) continue;
       candidates.set(row.accountId, {
         accountId: row.accountId,
@@ -199,6 +206,9 @@ export async function selectAdobeGenerationAccount(
   }
 
   const eligible = [...candidates.values()];
+  if (!eligible.length && rows.length && globalTokenExpired) {
+    throw new AppError("adobe_sherlock_unavailable", "Global Sherlock session has expired; update sherlockToken before submitting a task", 503);
+  }
   const available = eligible.filter((candidate) => !atLimit(candidate.accountId));
   const selected = accountId ? available[0] : available[Math.floor(Math.random() * available.length)];
   if (!selected) {
