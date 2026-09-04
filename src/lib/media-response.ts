@@ -32,7 +32,11 @@ export async function mediaUrls(request: Request, media: MediaRecord[]): Promise
 export async function openAiImageData(request: Request, media: MediaRecord[], responseFormat: "url" | "b64_json" = "url") {
   if (responseFormat === "b64_json") {
     return Promise.all(media.map(async (item) => {
-      const bytes = item.url && item.url.length ? await remoteMediaBytes(item.url) : (await readMediaBytes(item.objectKey)).bytes;
+      // returnOriginalUrl 模式下不要为了满足调用方声明的 b64_json 再由 KR
+      // 下载 Adobe 结果。Sub2API 能消费 url 字段并自行下载；直接透传可避免
+      // 生成已成功后因二次下载失败返回 500，也避免图片流量经过 KR。
+      if (item.url && item.url.length) return { url: item.url };
+      const bytes = (await readMediaBytes(item.objectKey)).bytes;
       return { b64_json: Buffer.from(bytes).toString("base64") };
     }));
   }
@@ -298,3 +302,4 @@ export function jobStatusForVideo(status: string): "queued" | "in_progress" | "c
   if (status === "QUEUED") return "queued";
   return "in_progress";
 }
+

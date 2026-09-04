@@ -34,6 +34,13 @@ describe("media response conversion", () => {
     await expect(openAiImageData(request, [image], "b64_json")).resolves.toEqual([{ b64_json: "AQID" }]);
   });
 
+  it("passes through remote URLs even when a compatible caller requests b64_json", async () => {
+    const request = new Request("https://api.test/v1/images/generations");
+    const remote = { ...image, url: "https://cdn.example/result.webp" };
+    await expect(openAiImageData(request, [remote], "b64_json")).resolves.toEqual([{ url: remote.url }]);
+    expect(mocks.readMediaBytes).not.toHaveBeenCalled();
+  });
+
   it("preserves image, video, and audio MIME families in typed chat parts", async () => {
     const parts = await openAiChatContentParts(new Request("https://api.test/v1/chat/completions"), [image, video, audio]);
     expect(parts).toEqual([
@@ -52,3 +59,4 @@ describe("media response conversion", () => {
     ]);
   });
 });
+
