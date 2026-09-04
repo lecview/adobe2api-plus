@@ -1,32 +1,55 @@
 # Backup, restore and rollback
 
-Last updated: 2026-09-04 (Asia/Shanghai).
+Last updated: 2026-09-04 13:56 (Asia/Shanghai).
 
-## Backup scope
+## Recorded deployment backups
 
-Before each deployment, create a timestamped directory under local `adobe2api-plus/backups/` and server `/opt/adobe2api-plus/backups/`. Capture only:
+- Local pre-deployment evidence: `E:\APP\codex\主机维护\KR主机\adobe2api-plus\backups\kr-predeploy-20260904-121508`.
+- Server pre-deployment evidence: `/opt/adobe2api-plus/backups/kr-predeploy-20260904-121508`.
+- Internal-network correction and before/after Compose files: `/opt/adobe2api-plus/backups/internal-network-fix-20260904-134659`.
+- Nginx target-absence marker and pre-security-header-fix site: `/opt/adobe2api-plus/backups/nginx-install-20260904-134815`.
+- DNS pre-operation response: `/opt/adobe2api-plus/backups/adobe2api.aimasker.com-before-create-20260904T055308Z.json` (mode `0600`).
 
-- Sub2API and host baseline metadata (container/image/health, ports, networks, volumes, resources and public HTTP status), without environment values;
-- current DNS response and the exact `adobe2api.aimasker.com` record object, if any;
-- Nginx candidate/current files that this project will add or change;
-- deployment templates, fixed source/CI commit, image digests and archive checksum;
-- sanitized Compose expansion and post-deployment container inspect output.
+Backups contain sanitized status/configuration evidence only. Production `.env`, database/volume contents, account data, session values, Tokens, Cookies, logs, generated media and unredacted API responses are not GitHub material.
 
-Production `.env`, databases, Docker volume contents, account data, tokens, cookies, logs, generated media and unredacted responses must not enter GitHub. Database/volume backups, when authorized, stay in the project backup area with restricted permissions.
+## Exact default rollback — new service only
 
-## Default rollback (new service only)
+The following stops only the new Compose project and leaves both data volumes intact:
 
-1. In `/opt/adobe2api-plus`, run `docker compose stop web worker mint mysql`. Do not use `down -v`.
-2. Leave `${COMPOSE_PROJECT_NAME}_mysql-data` and `${COMPOSE_PROJECT_NAME}_generated-media` intact by default.
-3. Remove only `/etc/nginx/sites-enabled/adobe2api.aimasker.com` and the independent adobe2api WebSocket map file created by this project. Keep the reviewed files in `/opt/adobe2api-plus/deploy/nginx` and the timestamped backup.
-4. Run `sudo nginx -t`; only if it passes, reload Nginx. Never restart or reload Sub2API.
-5. Decide separately whether rollback requires deleting `adobe2api.aimasker.com`. If deletion is required, use the saved record ID and verify the record still matches this project first. Do not modify any other hostname.
-6. Recheck Sub2API's three containers, `127.0.0.1:8081`, `/health`, `aimasker.com` and `api.aimasker.com` against the pre-deployment baseline.
+```sh
+cd /opt/adobe2api-plus/deploy/kr
+sudo docker compose \
+  --env-file /opt/adobe2api-plus/private/.env \
+  -f docker-compose.yml \
+  --profile upstream stop worker mint web mysql
+```
 
-## Application/image rollback
+Disable only this project's active Nginx files. Keep the reviewed `sites-available` files and project templates for diagnosis:
 
-To roll back only application code, keep MySQL/media volumes and `.env`, load the previously retained image archive, change only `WEB_IMAGE`/`MINT_IMAGE` to the recorded prior tags, run `docker compose config --quiet`, and recreate only this project's containers. Database migrations are forward-only; before deploying a commit with schema changes, confirm compatibility or make an authorized MySQL logical backup and restore rehearsal.
+```sh
+sudo rm -f /etc/nginx/sites-enabled/adobe2api.aimasker.com.conf
+sudo rm -f /etc/nginx/sites-enabled/adobe2api-plus-loopback.conf
+sudo rm -f /etc/nginx/conf.d/adobe2api-plus-websocket-map.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Do not use `docker compose down -v`. Do not remove these volumes unless a separate destructive-data authorization is given:
+
+```text
+aimasker-adobe2api-plus_mysql-data
+aimasker-adobe2api-plus_generated-media
+```
+
+DNS rollback is independent. Delete `adobe2api.aimasker.com` only if the rollback objective requires it, after re-reading the saved Cloudflare response and verifying the live record is still the unproxied A record to `43.128.140.43`. Never alter `aimasker.com`, `api.aimasker.com`, `imgs.aimasker.com` or any other record.
+
+After rollback, verify Sub2API still has three healthy containers, Web still binds `127.0.0.1:8081`, `/health` returns 200, and the enabled Sub2API Nginx file hash remains the recorded baseline. Nginx reload is shared configuration activation; it is not a Sub2API container restart.
+
+## Application image rollback
+
+Keep the `.env`, MySQL/media volumes and independent Nginx files. Load the retained earlier image archive, change only `WEB_IMAGE` and `MINT_IMAGE` in the server private environment, verify the archive/config, then recreate only this Compose project's Web (and Worker/mint only if they had been separately approved). Database migrations are forward-only; confirm compatibility before image rollback.
 
 ## Data restore
 
-Data restore is never part of the default rollback. It requires a separate authorization covering downtime and acceptable data loss. Validate archive checksums, image/schema compatibility and restore into an isolated database first. Never point adobe2api-plus at Sub2API PostgreSQL or Redis, and never restore these MySQL/media volumes over any Sub2API path.
+Data restore is not part of the default rollback. It requires separate authorization covering downtime and acceptable data loss. Validate checksums and schema compatibility, restore first into an isolated MySQL instance, and never point adobe2api-plus at Sub2API PostgreSQL, Redis, network, volumes or paths.
+

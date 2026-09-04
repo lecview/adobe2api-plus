@@ -54,12 +54,11 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-web
     restart: unless-stopped
     environment: *app-environment
-    ports:
-      - 127.0.0.1:${WEB_PORT:?WEB_PORT is required}:3000
     volumes:
       - generated-media:/app/data
     networks:
-      - backend
+      backend:
+        ipv4_address: 172.30.83.3
     depends_on:
       mysql:
         condition: service_healthy
@@ -154,6 +153,9 @@ networks:
   backend:
     name: ${COMPOSE_PROJECT_NAME}_backend
     internal: true
+    ipam:
+      config:
+        - subnet: 172.30.83.0/24
   egress:
     name: ${COMPOSE_PROJECT_NAME}_egress
 
@@ -162,3 +164,4 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME}_mysql-data
   generated-media:
     name: ${COMPOSE_PROJECT_NAME}_generated-media
+
