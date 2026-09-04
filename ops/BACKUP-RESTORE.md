@@ -1,13 +1,8 @@
 # Backup, restore and rollback
 
-Last updated: 2026-09-04 23:00 (Asia/Shanghai).
+Last updated: 2026-09-04 13:56 (Asia/Shanghai).
 
 ## Recorded deployment backups
-
-- Unified-model-routing server pre-deployment evidence: `/opt/adobe2api-plus/backups/20260904-223627-sherlock-mint-fix` (the retained directory name is historical; it is the 22:36 routing-deployment baseline).
-- Unified-model-routing server rollback environment/image evidence: `/opt/adobe2api-plus/backups/20260904-143921-unified-model-routing` (UTC timestamp).
-- Unified-model-routing server post-deployment evidence: `/opt/adobe2api-plus/backups/20260904-225503-unified-model-routing-postdeploy`.
-- Local snapshot archives: `backups/kr-predeploy-20260904-223627-unified-model-routing.tar.gz` and `backups/kr-postdeploy-20260904-225503-unified-model-routing.tar.gz`.
 
 - Local pre-deployment evidence: `E:\APP\codex\主机维护\KR主机\adobe2api-plus\backups\kr-predeploy-20260904-121508`.
 - Local post-deployment evidence: `E:\APP\codex\主机维护\KR主机\adobe2api-plus\backups\kr-postdeploy-20260904-135620`.
@@ -53,8 +48,6 @@ DNS rollback is independent. Delete `adobe2api.aimasker.com` only if the rollbac
 After rollback, verify Sub2API still has three healthy containers, Web still binds `127.0.0.1:8081`, `/health` returns 200, and the enabled Sub2API Nginx file hash remains the recorded baseline. Nginx reload is shared configuration activation; it is not a Sub2API container restart.
 
 ## Application image rollback
-
-For the 2026-09-04 unified-model-routing release, the exact previous application image was `aimasker/adobe2api-plus-web:5d7c6fdb546af5c145b407e13596cb8b5826d7b2`. Restore `/opt/adobe2api-plus/backups/20260904-143921-unified-model-routing/.env.predeploy` as mode `0600`, validate Compose, then recreate only Web and Worker with `--no-deps --force-recreate --wait`. Keep the currently running mint image `510e8333f35572b43c0618989fe13d21957897f5` and do not recreate MySQL or mint. Do not delete either named volume.
 
 Keep the `.env`, MySQL/media volumes and independent Nginx files. Load the retained earlier image archive, change only `WEB_IMAGE` and `MINT_IMAGE` in the server private environment, verify the archive/config, then recreate only this Compose project's Web (and Worker/mint only if they had been separately approved). Database migrations are forward-only; confirm compatibility before image rollback.
 
