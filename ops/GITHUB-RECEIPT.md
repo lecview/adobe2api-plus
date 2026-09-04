@@ -4,6 +4,12 @@ Recorded: 2026-09-04 (Asia/Shanghai).
 
 ## adobe2api-plus repository
 
+- Unified-model-routing pull request: `https://github.com/lecview/adobe2api-plus/pull/1`.
+- Merged source/deployment commit: `5a0134f723fd70fb5685131677affbf09e7708da`.
+- Successful CI/package run: `33884343710`.
+- Immutable release: `deployment-5a0134f723fd70fb5685131677affbf09e7708da`.
+- Release archive SHA-256: `2e934d7e77026d374c051ac180f81d6315d329c708bd5f12f3c43bb732169829`.
+
 - Repository: `lecview/adobe2api-plus`.
 - Immutable source/image deployment commit: `01e4de394808e374c64b5073cedec99c5dad7867`.
 - Successful CI/package run: `33839374314`.
