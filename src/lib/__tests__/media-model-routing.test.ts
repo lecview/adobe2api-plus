@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { publicModelList } from "@/lib/catalog";
 import { IMAGE_SIZE_MAP } from "@/lib/image-size-map";
 import { normalizePublicModels, PUBLIC_MEDIA_MODELS, resolveMediaRouting } from "@/lib/media-model-routing";
+import { normalizeChatRequest, normalizeGeminiRequest, normalizeImageRequest, normalizeVideoRequest } from "@/lib/media-request";
 
 describe("canonical media model routing", () => {
   it("publishes only the 13 stable families", () => {
@@ -66,5 +67,21 @@ describe("canonical media model routing", () => {
     { model: "veo31-6s-16x9-1080p", duration: 8 },
   ])("rejects unsupported video parameters before enqueue: $model", (input) => {
     expect(() => resolveMediaRouting(input, "video")).toThrowError(expect.objectContaining({ status: 400 }));
+  });
+
+  it("resolves identical parameters consistently across protocol entry points", () => {
+    const image = { model: "gpt-image-2", prompt: "offline fixture", aspect_ratio: "4:3", output_resolution: "4K" };
+    expect(new Set([
+      normalizeImageRequest(image).resolved_model,
+      normalizeChatRequest(image).resolved_model,
+      normalizeGeminiRequest("gpt-image-2", image).resolved_model,
+    ])).toEqual(new Set(["gpt-image-4k-4x3"]));
+
+    const video = { model: "seedance20-fast", prompt: "offline fixture", duration: 10, aspect_ratio: "9:16", resolution: "1080p", media_type: "video" };
+    expect(new Set([
+      normalizeVideoRequest(video, "sora").resolved_model,
+      normalizeChatRequest(video).resolved_model,
+      normalizeGeminiRequest("seedance20-fast", video).resolved_model,
+    ])).toEqual(new Set(["seedance20-fast-10s-9x16-1080p"]));
   });
 });

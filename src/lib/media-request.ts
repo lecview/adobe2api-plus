@@ -678,7 +678,7 @@ export function normalizeGeminiRequest(modelName: string, body: unknown): Normal
   const width = video ? videoProvider.width : undefined;
   const height = video ? videoProvider.height : undefined;
   const requestedSize = input.size ?? (width !== undefined && height !== undefined ? `${width}x${height}` : undefined);
-  const imageSize = stringValue(imageConfig.imageSize ?? imageConfig.image_size);
+  const imageSize = stringValue(imageConfig.imageSize ?? imageConfig.image_size ?? optionValue(layers, ["output_resolution", "outputResolution"]));
   const explicitDuration = explicitNumber({ ...videoConfig, ...input }, ["duration", "seconds", "duration_seconds", "durationSeconds"], "invalid_duration", "Video duration") ?? videoProvider.duration;
   const generatedAudio = videoProvider.generate_audio;
   const routing = resolveMediaRouting({ model: modelName, size: requestedSize, aspect_ratio: imageConfig.aspectRatio ?? imageConfig.aspect_ratio ?? videoConfig.aspectRatio ?? videoConfig.aspect_ratio ?? input.aspect_ratio ?? input.aspectRatio, output_resolution: imageSize, quality: optionValue(layers, ["quality"]), duration: explicitDuration, resolution: videoProvider.resolution, generate_audio: generatedAudio }, video ? "video" : "image");
