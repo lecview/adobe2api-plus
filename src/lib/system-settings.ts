@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { systemSetting } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { config } from "@/lib/config";
+import { normalizePublicModels } from "@/lib/media-model-routing";
 
 export const DEFAULT_RETRY_STATUS_CODES = [429, 451, 500, 502, 503, 504] as const;
 export const DEFAULT_RETRY_ERROR_TYPES = ["timeout", "connection", "proxy"] as const;
@@ -138,7 +139,7 @@ export function normalizeSystemSettings(row?: SystemSettingRow | null): SystemSe
   return {
     proxyEnabled: row?.proxyEnabled === true,
     mediaRoot: typeof row?.mediaRoot === "string" && row.mediaRoot.trim() ? row.mediaRoot.trim() : fallback.mediaRoot,
-    publicModels: Array.isArray(row?.publicModels) ? listOfStrings(row.publicModels, []) : null,
+    publicModels: Array.isArray(row?.publicModels) ? normalizePublicModels(row.publicModels) : null,
     publicBaseUrl: typeof row?.publicBaseUrl === "string" ? row.publicBaseUrl.trim() : fallback.publicBaseUrl,
     adobeBaseUrl: typeof row?.adobeBaseUrl === "string" ? row.adobeBaseUrl.trim() : fallback.adobeBaseUrl,
     generateTimeoutSeconds: boundedInt(row?.generateTimeoutSeconds, fallback.generateTimeoutSeconds, 1, 3600),

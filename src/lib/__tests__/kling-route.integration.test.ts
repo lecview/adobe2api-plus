@@ -123,7 +123,7 @@ describe("Kling protocol route", () => {
 
   it("keeps Kling image2video JSON compatible with canonical Seedance IDs", async () => {
     const response = await klingVideos(request(JSON.stringify({
-      model: "seedance20-5s-16x9-1080p",
+      model: "seedance20",
       prompt: "use this frame",
       image: "https://cdn.example/frame.png",
     }), "application/json"), params("image2video"));
@@ -131,8 +131,8 @@ describe("Kling protocol route", () => {
     expect(response.status).toBe(200);
     expect(mocks.enqueueGeneration).toHaveBeenCalledWith(expect.objectContaining({
       apiPath: "/kling/v1/videos/image2video",
-      model: "seedance20-5s-16x9-1080p",
-      payload: expect.objectContaining({ protocol: "kling", images: ["https://cdn.example/frame.png"] }),
+      model: "seedance20",
+      payload: expect.objectContaining({ protocol: "kling", requested_model: "seedance20", resolved_model: "seedance20-8s-16x9-720p", images: ["https://cdn.example/frame.png"] }),
     }));
   });
 });

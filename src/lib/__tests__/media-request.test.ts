@@ -201,21 +201,19 @@ describe("media protocol normalization", () => {
     expect(result).toMatchObject({ protocol: "kling", kind: "video", model: "seedance20-fast-5s-16x9-1080p", images: ["https://example.com/first.png"], duration: 5 });
   });
 
-  it("keeps the model resolution, falls back auto to 1:1, and keeps mask separate", () => {
-    const result = normalizeImageRequest({
+  it("rejects auto ratio that conflicts with a legacy model before enqueue", () => {
+    expect(() => normalizeImageRequest({
       model: "gpt-image-2k-16x9",
       prompt: "edit this",
       size: "1024x1024",
       aspect_ratio: "auto",
       images: ["data:image/png;base64,cG5n"],
       mask: { image_url: { url: "data:image/png;base64,bWFzaw==" } },
-    }, "openai-edits");
-    expect(result).toMatchObject({ aspect_ratio: "1:1", output_resolution: "2K", images: ["data:image/png;base64,cG5n"], mask: "data:image/png;base64,bWFzaw==" });
+    }, "openai-edits")).toThrowError(expect.objectContaining({ status: 400 }));
   });
 
-  it("prefers an explicit aspect ratio over a conflicting size ratio", () => {
-    const result = normalizeImageRequest({ model: "gpt-image-1k-16x9", prompt: "wide", size: "1024x1024", aspect_ratio: "16:9" });
-    expect(result).toMatchObject({ aspect_ratio: "16:9", output_resolution: "1K" });
+  it("rejects an explicit aspect ratio that conflicts with size", () => {
+    expect(() => normalizeImageRequest({ model: "gpt-image-1k-16x9", prompt: "wide", size: "1024x1024", aspect_ratio: "16:9" })).toThrowError(expect.objectContaining({ status: 400 }));
   });
 
   it("collects multiple image and video references from chat parts", () => {
@@ -255,7 +253,7 @@ describe("media protocol normalization", () => {
 
   it("keeps explicit Kling dimensions and candidate count in the normalized request", () => {
     const result = normalizeVideoRequest({
-      model: "kling3-5s-16x9",
+      model: "kling3",
       prompt: "a paper plane",
       width: 1920,
       height: 1080,

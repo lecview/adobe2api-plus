@@ -1,6 +1,6 @@
 import { requireServiceApiKey } from "@/lib/service-auth";
 import { AppError, errorType, getRequestId, toErrorResponse } from "@/lib/errors";
-import { referenceLimitsForVideo, VIDEO_MODEL_CATALOG, resolveImageOptions } from "@/lib/catalog";
+import { referenceLimitsForVideo, VIDEO_MODEL_CATALOG } from "@/lib/catalog";
 import { enqueueGeneration, openAiError, validateReferenceUrls, waitForGeneration } from "@/lib/gateway";
 import { isVideoRequested, normalizeChatRequest } from "@/lib/media-request";
 import { readJobEvents } from "@/lib/jobs";
@@ -50,16 +50,13 @@ export async function POST(request: Request) {
     const normalizedBody = withCanonicalProtocolModel(body, isVideoRequest(body) ? "video" : "image");
     if (isVideoRequested(body)) normalizedBody.media_type = "video";
     const input = normalizeChatRequest(normalizedBody);
-    const video = input.kind === "video" ? VIDEO_MODEL_CATALOG[input.model] : undefined;
-    // GPT Image 质量默认 high（原 gptImageQuality 系统配置已移除）。
-    const imageOptions = video ? undefined : resolveImageOptions({ model: input.model, aspect_ratio: input.aspect_ratio, size: input.size as string | undefined, quality: typeof input.quality === "string" ? input.quality : "high", output_resolution: input.output_resolution });
+    const video = input.kind === "video" ? VIDEO_MODEL_CATALOG[input.resolved_model] : undefined;
     await validateReferenceUrls(input, referenceLimitsForVideo(video));
-    const model = video ?? imageOptions!.model;
-    const job = await enqueueGeneration({ apiPath: "/v1/chat/completions", model: model.id, payload: { ...input, quality: input.quality ?? "high", resolved_video: video ?? null, resolved_aspect_ratio: input.aspect_ratio, resolved_output_resolution: imageOptions?.outputResolution } });
+    const job = await enqueueGeneration({ apiPath: "/v1/chat/completions", model: input.requested_model, payload: input });
     const useContentParts = contentPartsRequested(body);
-    if (input.stream === true) return streamCompletion(request, job.id, model.id, requestId, useContentParts);
+    if (input.stream === true) return streamCompletion(request, job.id, input.requested_model, requestId, useContentParts);
     const result = await waitForGeneration(job.id);
-    return Response.json({ id: `chatcmpl-${job.id}`, object: "chat.completion", created: Math.floor(Date.now() / 1000), model: model.id, choices: await chatChoices(request, result, useContentParts), usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } }, { headers: { "x-request-id": requestId } });
+    return Response.json({ id: `chatcmpl-${job.id}`, object: "chat.completion", created: Math.floor(Date.now() / 1000), model: input.requested_model, choices: await chatChoices(request, result, useContentParts), usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } }, { headers: { "x-request-id": requestId } });
   } catch (error) {
     if (error instanceof AppError && error.status < 500) return Response.json(openAiError(error.message, errorType(error), error.code), { status: error.status, headers: { "x-request-id": requestId } });
     return toErrorResponse(error, requestId);

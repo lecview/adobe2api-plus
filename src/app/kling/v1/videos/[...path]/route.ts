@@ -41,8 +41,8 @@ export async function POST(request: Request, { params }: { params: Promise<unkno
     const isMultipart = request.headers.get("content-type")?.toLowerCase().includes("multipart/form-data");
     const body = isMultipart ? await parseVideoMultipartBody(request) : await request.json();
     const input = normalizeVideoRequest(withCanonicalProtocolModel(body, "video"), "kling", operation);
-    await validateReferenceUrls(input, referenceLimitsForVideo(VIDEO_MODEL_CATALOG[input.model]));
-    const job = await enqueueGeneration({ apiPath: `/kling/v1/videos/${operation}`, model: input.model, payload: input });
+    await validateReferenceUrls(input, referenceLimitsForVideo(VIDEO_MODEL_CATALOG[input.resolved_model]));
+    const job = await enqueueGeneration({ apiPath: `/kling/v1/videos/${operation}`, model: input.requested_model, payload: input });
     const task = await findVideoJob(job.id);
     return Response.json(await klingResponse(request, task, requestId), { status: 200, headers: { "x-request-id": requestId } });
   } catch (error) {

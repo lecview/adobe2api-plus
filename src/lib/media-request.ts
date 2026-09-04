@@ -1,16 +1,10 @@
 import { AppError } from "@/lib/errors";
 import { inferMediaMimeFromUrl } from "@/lib/ssrf";
+import { normalizePublicModelId, resolveMediaRouting } from "@/lib/media-model-routing";
 import {
-  DEFAULT_MODEL_ID,
-  IMAGE_MODEL_CATALOG,
-  VIDEO_MODEL_CATALOG,
-  isImageProviderAlias,
-  isSeedanceProviderAlias,
   isVideoModel,
-  isVideoProviderAlias,
   resolveImageModel,
   resolveVideoModel,
-  SUPPORTED_RATIOS,
   type ImageModel,
   type VideoModel,
 } from "@/lib/catalog";
@@ -42,6 +36,8 @@ export type NormalizedMediaRequest = {
   protocol: MediaProtocol;
   kind: MediaKind;
   model: string;
+  requested_model: string;
+  resolved_model: string;
   prompt: string;
   n: number;
   aspect_ratio?: string;
@@ -512,77 +508,12 @@ function topLevelMedia(body: RecordValue) {
   return { images: unique(target.images), videos: unique(target.videos), audios: unique(target.audios) };
 }
 
-function normalizeRatio(value: unknown, fallback = "16:9"): string {
-  const raw = stringValue(value)?.toLowerCase();
-  // Adobe image/video payloads do not accept `auto`. The public contract
-  // documents a deterministic 1:1 compatibility fallback.
-  if (raw === "auto") return "1:1";
-  const ratio = raw ?? fallback.toLowerCase();
-  if (!SUPPORTED_RATIOS.has(ratio)) throw new AppError("invalid_aspect_ratio", "Unsupported aspect_ratio", 400);
-  return ratio;
-}
-
-function resolutionFromSize(value: unknown, kind: "image" | "video" = "image"): { aspectRatio?: string; resolution?: string } {
-  const size = stringValue(value);
-  if (!size) return {};
-  const normalized = size.toLowerCase();
-  if (kind === "image" && /^(1|2|4)k$/.test(normalized)) return { resolution: normalized.toUpperCase() };
-  if (kind === "video" && /^(480|720|1080)p$/.test(normalized)) return { resolution: normalized };
-  if (normalized === "auto") return {};
-  const match = size.match(/^(\d+)x(\d+)$/i);
-  if (!match) {
-    if (kind === "video") throw new AppError("invalid_resolution", "Video size must be 480p, 720p, 1080p or WIDTHxHEIGHT", 400);
-    return { resolution: size.toUpperCase() };
-  }
-  const width = Number(match[1]);
-  const height = Number(match[2]);
-  if (width <= 0 || height <= 0) return {};
-  const ratio = width / height;
-  // Keep the candidate list coupled to the catalog's accepted ratios, so a
-  // future catalog change cannot accidentally create an invalid normalized
-  // ratio.
-  const candidates: Array<[number, string]> = [
-    [1 / 8, "1:8"], [1 / 4, "1:4"], [2 / 3, "2:3"], [3 / 4, "3:4"], [4 / 5, "4:5"], [4 / 3, "4:3"],
-    [3 / 2, "3:2"], [5 / 4, "5:4"], [4, "4:1"], [8, "8:1"], [21 / 9, "21:9"], [16 / 9, "16:9"], [9 / 16, "9:16"], [1, "1:1"],
-  ];
-  const supportedCandidates = candidates.filter(([, candidate]) => SUPPORTED_RATIOS.has(candidate));
-  const aspectRatio = supportedCandidates.sort((a, b) => Math.abs(a[0] - ratio) - Math.abs(b[0] - ratio))[0]?.[1];
-  const area = width * height;
-  const videoResolution = Math.max(width, height) >= 1900 ? "1080p" : Math.max(width, height) >= 1200 ? "720p" : "480p";
-  // OpenAI-compatible image sizes use 1024x1024 as 1K. Area thresholds also
-  // cover the common 1024x1792/1792x1024 and GPT Image pixel dimensions.
-  const imageResolution = area <= 2_000_000 ? "1K" : area <= 5_500_000 ? "2K" : "4K";
-  return { aspectRatio, resolution: kind === "video" ? videoResolution : imageResolution };
-}
-
-function normalizeOutputResolution(value: unknown, fallback?: string): string | undefined {
-  const raw = stringValue(value)?.toUpperCase();
-  if (raw && /^(1|2|4)K$/.test(raw)) return raw;
-  const fallbackValue = stringValue(fallback)?.toUpperCase();
-  const normalizedFallback = fallbackValue && /^(1|2|4)K$/.test(fallbackValue) ? fallbackValue : undefined;
-  if (raw === "AUTO") return normalizedFallback;
-  return raw && /^(1|2|4)K$/.test(raw) ? raw : normalizedFallback;
-}
-
-function normalizeVideoResolution(value: unknown, fallback = "720p"): string {
-  const raw = stringValue(value)?.toLowerCase();
-  if (!raw || raw === "auto") return fallback.toLowerCase();
-  if (!/^(480|720|1080)p$/.test(raw)) throw new AppError("invalid_resolution", "Video resolution must be 480p, 720p or 1080p", 400);
-  return raw;
-}
-
 function explicitNumber(input: RecordValue, keys: string[], code: string, label: string): number | undefined {
   const value = keys.map((key) => input[key]).find((candidate) => candidate !== undefined && candidate !== null && candidate !== "");
   if (value === undefined) return undefined;
   const parsed = numberValue(value);
   if (parsed === undefined) throw new AppError(code, `${label} must be a number`, 400);
   return parsed;
-}
-
-function isConcreteVideoModel(value: string | undefined): boolean {
-  if (!value) return false;
-  const normalized = value.toLowerCase();
-  return Boolean(VIDEO_MODEL_CATALOG[normalized] || VIDEO_MODEL_CATALOG[normalized.replace(/^firefly-/, "")]);
 }
 
 function conversationValue(input: RecordValue): unknown {
@@ -606,43 +537,6 @@ function extractMask(value: unknown): string | undefined {
   return masks[0];
 }
 
-function isStrictImageProviderAlias(value: string): boolean {
-  return isImageProviderAlias(value);
-}
-
-function resolveImageForProtocol(modelId: string | undefined, fallback = DEFAULT_MODEL_ID): ImageModel {
-  const candidate = stringValue(modelId);
-  if (!candidate) return resolveImageModel(fallback);
-  const normalized = candidate.toLowerCase();
-  if (VIDEO_MODEL_CATALOG[normalized] || isVideoModel(candidate)) {
-    throw new AppError("invalid_request_error", "Video models must use /v1/videos or /v1/chat/completions", 400);
-  }
-  if (IMAGE_MODEL_CATALOG[normalized]) return IMAGE_MODEL_CATALOG[normalized];
-  const legacy = normalized.replace(/^firefly-/, "");
-  if (IMAGE_MODEL_CATALOG[legacy]) return IMAGE_MODEL_CATALOG[legacy];
-  if (isStrictImageProviderAlias(candidate) || isStrictImageProviderAlias(legacy)) {
-    if (/^nano[-_]banana-pro$/i.test(legacy)) return resolveImageModel("nano-banana-pro-2k-16x9");
-    if (/^nano[-_]banana2$/i.test(legacy)) return resolveImageModel("nano-banana2-2k-16x9");
-    if (/^nano[-_]banana$/i.test(legacy)) return resolveImageModel("nano-banana-2k-16x9");
-    return resolveImageModel("gpt-image-1k-16x9");
-  }
-  throw new AppError("invalid_model", "Unsupported image model", 400);
-}
-
-function resolveVideoForProtocol(modelId: string | undefined, fallback = "kling3-5s-16x9"): VideoModel {
-  const candidate = stringValue(modelId);
-  if (!candidate || candidate.toLowerCase() === "kling" || candidate.toLowerCase() === "kling-3" || candidate.toLowerCase() === "kling3") return resolveVideoModel(fallback);
-  const normalized = candidate.toLowerCase();
-  if (IMAGE_MODEL_CATALOG[normalized]) return resolveVideoModel(fallback);
-  if (VIDEO_MODEL_CATALOG[normalized]) return VIDEO_MODEL_CATALOG[normalized];
-  if (isSeedanceProviderAlias(candidate)) {
-    const fast = /fast/i.test(candidate);
-    return resolveVideoModel(`seedance20${fast ? "-fast" : ""}-8s-16x9-720p`);
-  }
-  if (isVideoProviderAlias(candidate)) return resolveVideoModel(fallback);
-  throw new AppError("invalid_model", "Unsupported video model", 400);
-}
-
 function clampPositiveInt(value: unknown, fallback = 1, max = 10): number {
   const parsed = intValue(value) ?? fallback;
   if (parsed < 1 || parsed > max) throw new AppError("invalid_request_error", `n must be between 1 and ${max}`, 400);
@@ -656,22 +550,24 @@ export function normalizeImageRequest(body: unknown, protocol: "openai-images" |
   const top = topLevelMedia(input);
   const prompt = stringValue(input.prompt) ?? "";
   if (!prompt) throw new AppError("invalid_request_error", "prompt is required", 400);
-  const model = resolveImageForProtocol(stringValue(input.model));
-  const size = resolutionFromSize(input.size, "image");
-  const aspectRatio = normalizeRatio(input.aspect_ratio ?? input.aspectRatio ?? size.aspectRatio ?? model.aspectRatio, model.aspectRatio);
-  // 分辨率档位由 model 决定：size 只当比例，不参与档位推断（用户传 2160x3840 配 2K 模型也输出 2K）
-  const outputResolution = normalizeOutputResolution(input.output_resolution, model.outputResolution) ?? model.outputResolution;
+  const routing = resolveMediaRouting({
+    model: input.model, size: input.size, aspect_ratio: input.aspect_ratio ?? input.aspectRatio,
+    output_resolution: input.output_resolution ?? input.outputResolution,
+    quality: optionValue(layers, ["quality"]),
+  }, "image");
   const mask = extractMask(input.mask);
   return {
     ...input,
     protocol,
     kind: "image",
-    model: model.id,
+    model: routing.resolvedModel,
+    requested_model: routing.requestedModel,
+    resolved_model: routing.resolvedModel,
     prompt,
     n: clampPositiveInt(input.n, 1, 10),
-    aspect_ratio: aspectRatio,
-    output_resolution: outputResolution,
-    quality: stringValue(optionValue(layers, ["quality"])),
+    aspect_ratio: routing.aspectRatio,
+    output_resolution: routing.outputResolution,
+    quality: routing.quality,
     // GPT Image clients, including Cherry Studio, consume base64 when the
     // caller does not specify a format. Keep explicit URL requests unchanged.
     response_format: input.response_format === "url" ? "url" : "b64_json",
@@ -694,19 +590,14 @@ export function normalizeChatRequest(body: unknown): NormalizedMediaRequest {
   if (!prompt) throw new AppError("invalid_request_error", "messages, contents or prompt is required", 400);
   const requestedVideo = isVideoRequested(input);
   const modelId = stringValue(input.model);
-  const videoModel = requestedVideo || Boolean(modelId && isVideoModel(modelId)) ? resolveVideoForProtocol(modelId) : undefined;
-  const imageModel = videoModel ? undefined : resolveImageForProtocol(modelId);
-  const width = videoModel ? videoProvider.width : undefined;
-  const height = videoModel ? videoProvider.height : undefined;
+  const normalizedFamily = normalizePublicModelId(modelId);
+  const video = requestedVideo || Boolean(modelId && (isVideoModel(modelId) || normalizedFamily && ["sora2", "sora2-pro", "veo31", "veo31-ref", "gemini-omni", "kling3", "kling-o3", "seedance20", "seedance20-fast"].includes(normalizedFamily)));
+  const width = video ? videoProvider.width : undefined;
+  const height = video ? videoProvider.height : undefined;
   const requestedSize = input.size ?? (width !== undefined && height !== undefined ? `${width}x${height}` : undefined);
-  const size = resolutionFromSize(requestedSize, videoModel ? "video" : "image");
-  const aspectRatio = normalizeRatio(input.aspect_ratio ?? input.aspectRatio ?? size.aspectRatio ?? videoModel?.aspectRatio ?? imageModel?.aspectRatio, videoModel?.aspectRatio ?? imageModel?.aspectRatio ?? "16:9");
   const explicitDuration = explicitNumber(input, ["duration", "seconds", "duration_seconds", "durationSeconds"], "invalid_duration", "Video duration") ?? videoProvider.duration;
-  if (videoModel && explicitDuration !== undefined && isConcreteVideoModel(modelId) && explicitDuration !== videoModel.duration) {
-    throw new AppError("invalid_duration", `Model ${videoModel.id} requires ${videoModel.duration} seconds`, 400);
-  }
-  const videoResolution = videoModel ? normalizeVideoResolution(videoProvider.resolution ?? size.resolution, videoModel.resolution ?? "720p") : undefined;
   const generatedAudio = videoProvider.generate_audio;
+  const routing = resolveMediaRouting({ model: modelId, size: requestedSize, aspect_ratio: input.aspect_ratio ?? input.aspectRatio, output_resolution: optionValue(layers, ["output_resolution", "outputResolution"]), quality: optionValue(layers, ["quality"]), duration: explicitDuration, resolution: videoProvider.resolution, generate_audio: generatedAudio }, video ? "video" : "image");
   const media = {
     images: unique([...conversation.images, ...top.images]),
     videos: unique([...conversation.videos, ...top.videos]),
@@ -716,23 +607,25 @@ export function normalizeChatRequest(body: unknown): NormalizedMediaRequest {
   return {
     ...input,
     protocol: "openai-chat",
-    kind: videoModel ? "video" : "image",
-    model: videoModel?.id ?? imageModel!.id,
+    kind: routing.kind,
+    model: routing.resolvedModel,
+    requested_model: routing.requestedModel,
+    resolved_model: routing.resolvedModel,
     prompt,
-    n: clampPositiveInt(input.n, 1, videoModel ? 4 : 10),
-    aspect_ratio: aspectRatio,
-    output_resolution: imageModel ? normalizeOutputResolution(optionValue(layers, ["output_resolution", "outputResolution"]), imageModel.outputResolution) : undefined,
-    resolution: videoModel ? videoResolution : stringValue(input.resolution ?? input.videoResolution ?? input.video_resolution) ?? size.resolution,
+    n: clampPositiveInt(input.n, 1, routing.kind === "video" ? 4 : 10),
+    aspect_ratio: routing.aspectRatio,
+    output_resolution: routing.outputResolution,
+    resolution: routing.resolution,
     width,
     height,
-    duration: explicitDuration ?? videoModel?.duration,
+    duration: routing.duration,
     fps: videoProvider.fps,
-    quality: stringValue(optionValue(layers, ["quality"])),
+    quality: routing.quality,
     ...imageProvider,
     images: media.images,
     videos: media.videos,
     audios: media.audios,
-    generate_audio: generatedAudio === undefined ? videoModel?.generateAudio : generatedAudio,
+    generate_audio: routing.generateAudio,
     negative_prompt: videoProvider.negative_prompt,
     reference_mode: videoProvider.reference_mode,
     mode: videoProvider.mode,
@@ -770,8 +663,8 @@ export function normalizeGeminiRequest(modelName: string, body: unknown): Normal
   const top = topLevelMedia(input);
   const prompt = stringValue(input.prompt) ?? conversation.prompt;
   if (!prompt) throw new AppError("invalid_request_error", "contents or prompt is required", 400);
-  const videoModel = wantsVideo || isVideoModel(modelName) ? resolveVideoForProtocol(modelName) : undefined;
-  const imageModel = videoModel ? undefined : resolveImageForProtocol(modelName, "gpt-image-1k-16x9");
+  const normalizedFamily = normalizePublicModelId(modelName);
+  const video = wantsVideo || isVideoModel(modelName) || Boolean(normalizedFamily && ["sora2", "sora2-pro", "veo31", "veo31-ref", "gemini-omni", "kling3", "kling-o3", "seedance20", "seedance20-fast"].includes(normalizedFamily));
   const videoConfig = {
     ...record(extraBody.video_config),
     ...record(extraBody.videoConfig),
@@ -782,35 +675,31 @@ export function normalizeGeminiRequest(modelName: string, body: unknown): Normal
     ...record(input.video_config),
     ...record(input.videoConfig),
   };
-  const width = videoModel ? videoProvider.width : undefined;
-  const height = videoModel ? videoProvider.height : undefined;
+  const width = video ? videoProvider.width : undefined;
+  const height = video ? videoProvider.height : undefined;
   const requestedSize = input.size ?? (width !== undefined && height !== undefined ? `${width}x${height}` : undefined);
-  const sized = resolutionFromSize(requestedSize, videoModel ? "video" : "image");
-  const aspectRatio = normalizeRatio(imageConfig.aspectRatio ?? imageConfig.aspect_ratio ?? videoConfig.aspectRatio ?? videoConfig.aspect_ratio ?? input.aspect_ratio ?? input.aspectRatio ?? sized.aspectRatio ?? imageModel?.aspectRatio ?? videoModel?.aspectRatio, imageModel?.aspectRatio ?? videoModel?.aspectRatio ?? "16:9");
-  const imageSize = stringValue(imageConfig.imageSize ?? imageConfig.image_size);
-  const outputResolution = imageModel ? normalizeOutputResolution(imageSize, imageModel.outputResolution) : undefined;
+  const imageSize = stringValue(imageConfig.imageSize ?? imageConfig.image_size ?? optionValue(layers, ["output_resolution", "outputResolution"]));
   const explicitDuration = explicitNumber({ ...videoConfig, ...input }, ["duration", "seconds", "duration_seconds", "durationSeconds"], "invalid_duration", "Video duration") ?? videoProvider.duration;
-  if (videoModel && explicitDuration !== undefined && isConcreteVideoModel(modelName) && explicitDuration !== videoModel.duration) {
-    throw new AppError("invalid_duration", `Model ${videoModel.id} requires ${videoModel.duration} seconds`, 400);
-  }
-  const videoResolution = videoModel ? normalizeVideoResolution(videoProvider.resolution ?? sized.resolution, videoModel.resolution ?? "720p") : undefined;
   const generatedAudio = videoProvider.generate_audio;
+  const routing = resolveMediaRouting({ model: modelName, size: requestedSize, aspect_ratio: imageConfig.aspectRatio ?? imageConfig.aspect_ratio ?? videoConfig.aspectRatio ?? videoConfig.aspect_ratio ?? input.aspect_ratio ?? input.aspectRatio, output_resolution: imageSize, quality: optionValue(layers, ["quality"]), duration: explicitDuration, resolution: videoProvider.resolution, generate_audio: generatedAudio }, video ? "video" : "image");
   const mask = extractMask(input.mask);
   return {
     ...input,
     protocol: "gemini",
-    kind: videoModel ? "video" : "image",
-    model: videoModel?.id ?? imageModel!.id,
+    kind: routing.kind,
+    model: routing.resolvedModel,
+    requested_model: routing.requestedModel,
+    resolved_model: routing.resolvedModel,
     prompt,
-    n: clampPositiveInt(input.n, 1, videoModel ? 4 : 10),
-    aspect_ratio: aspectRatio,
-    output_resolution: outputResolution,
-    resolution: videoModel ? videoResolution : stringValue(optionValue(layers, ["resolution", "videoResolution", "video_resolution"])) ?? sized.resolution,
+    n: clampPositiveInt(input.n, 1, routing.kind === "video" ? 4 : 10),
+    aspect_ratio: routing.aspectRatio,
+    output_resolution: routing.outputResolution,
+    resolution: routing.resolution,
     width,
     height,
-    duration: explicitDuration ?? videoModel?.duration,
-    generate_audio: generatedAudio === undefined ? videoModel?.generateAudio : generatedAudio,
-    quality: stringValue(optionValue(layers, ["quality"])),
+    duration: routing.duration,
+    generate_audio: routing.generateAudio,
+    quality: routing.quality,
     ...imageProvider,
     negative_prompt: videoProvider.negative_prompt,
     reference_mode: videoProvider.reference_mode,
@@ -837,40 +726,35 @@ export function normalizeVideoRequest(body: unknown, protocol: "sora" | "kling",
   const prompt = stringValue(input.prompt) ?? conversation.prompt;
   if (!prompt) throw new AppError("invalid_request_error", "prompt is required", 400);
   const fallback = protocol === "sora" ? "sora2-8s-16x9" : "kling3-5s-16x9";
-  const model = resolveVideoForProtocol(stringValue(input.model ?? input.model_name ?? input.model_id), fallback);
+  const requestedModel = stringValue(input.model ?? input.model_name ?? input.model_id) ?? fallback;
   const width = videoProvider.width;
   const height = videoProvider.height;
   const requestedSize = input.size ?? (width !== undefined && height !== undefined ? `${width}x${height}` : undefined);
-  const size = resolutionFromSize(requestedSize, "video");
-  const aspectRatio = normalizeRatio(videoProvider.aspect_ratio ?? size.aspectRatio ?? model.aspectRatio, model.aspectRatio);
   const images = unique([...conversation.images, ...top.images]);
   if (operation === "image2video" && images.length === 0) throw new AppError("invalid_request_error", "image is required for image2video", 400);
   const explicitDuration = explicitNumber(input, ["duration", "seconds", "duration_seconds", "durationSeconds"], "invalid_duration", "Video duration") ?? videoProvider.duration;
-  const duration = explicitDuration ?? model.duration;
-  if (!Number.isInteger(duration) || duration < 1 || duration > 15) throw new AppError("invalid_duration", "Video duration must be between 1 and 15 seconds", 400);
-  if (explicitDuration !== undefined && isConcreteVideoModel(stringValue(input.model ?? input.model_name ?? input.model_id)) && explicitDuration !== model.duration) {
-    throw new AppError("invalid_duration", `Model ${model.id} requires ${model.duration} seconds`, 400);
-  }
-  const resolution = normalizeVideoResolution(videoProvider.resolution ?? size.resolution, model.resolution ?? "720p");
   const generatedAudio = videoProvider.generate_audio;
+  const routing = resolveMediaRouting({ model: requestedModel, size: requestedSize, aspect_ratio: videoProvider.aspect_ratio, duration: explicitDuration, resolution: videoProvider.resolution, generate_audio: generatedAudio }, "video");
   return {
     ...input,
     protocol,
     kind: "video",
-    model: model.id,
+    model: routing.resolvedModel,
+    requested_model: routing.requestedModel,
+    resolved_model: routing.resolvedModel,
     prompt,
     n: clampPositiveInt(input.n, 1, 4),
-    aspect_ratio: aspectRatio,
-    resolution,
+    aspect_ratio: routing.aspectRatio,
+    resolution: routing.resolution,
     width,
     height,
-    duration,
+    duration: routing.duration,
     fps: videoProvider.fps,
     images,
     videos: unique([...conversation.videos, ...top.videos]),
     audios: unique([...conversation.audios, ...top.audios]),
     negative_prompt: videoProvider.negative_prompt,
-    generate_audio: generatedAudio === undefined ? model.generateAudio : generatedAudio,
+    generate_audio: routing.generateAudio,
     reference_mode: videoProvider.reference_mode,
     mode: videoProvider.mode,
     cfg_scale: videoProvider.cfg_scale,
@@ -896,7 +780,7 @@ export async function fileToDataUrl(file: File, options: { kind: "image" | "vide
 }
 
 export function modelForNormalizedRequest(request: NormalizedMediaRequest): ImageModel | VideoModel {
-  return request.kind === "video" ? resolveVideoModel(request.model) : resolveImageModel(request.model);
+  return request.kind === "video" ? resolveVideoModel(request.resolved_model ?? request.model) : resolveImageModel(request.resolved_model ?? request.model);
 }
 
 export function isNormalizedMediaRequest(value: unknown): value is NormalizedMediaRequest {

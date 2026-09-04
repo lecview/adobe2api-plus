@@ -198,7 +198,7 @@ describe("media protocol normalization", () => {
       prompt: "a paper plane",
       image: "data:image/png;base64,cG5n",
     }, "kling", "image2video");
-    expect(kling).toMatchObject({ protocol: "kling", kind: "video", model: "kling3-5s-16x9", duration: 5 });
+    expect(kling).toMatchObject({ protocol: "kling", kind: "video", model: "kling3-5s-16x9-720p", duration: 5 });
     expect(kling.images).toEqual(["data:image/png;base64,cG5n"]);
   });
 });
@@ -348,7 +348,7 @@ describe("Adobe media payload integration", () => {
 
   it("keeps normalized video dimensions and count while preserving mixed Seedance references", () => {
     const normalized = normalizeVideoRequest({
-      model_name: "kling3-5s-16x9",
+      model_name: "kling3",
       prompt: "a paper plane over the ocean",
       n: 2,
       duration: 5,
@@ -467,7 +467,7 @@ describe("public media protocol route envelopes", () => {
       headers: { "content-type": "application/json" },
     }));
     expect(response.status).toBe(200);
-    expect(mocks.enqueueGeneration).toHaveBeenCalledWith(expect.objectContaining({ apiPath: "/v1/images/generations", model: "gpt-image-1k-16x9", payload: expect.objectContaining({ kind: "image", protocol: "openai-images", response_format: "b64_json" }) }));
+    expect(mocks.enqueueGeneration).toHaveBeenCalledWith(expect.objectContaining({ apiPath: "/v1/images/generations", model: "gpt-image-2", payload: expect.objectContaining({ kind: "image", protocol: "openai-images", requested_model: "gpt-image-2", resolved_model: "gpt-image-1k-16x9", response_format: "b64_json" }) }));
     expect(mocks.openAiImageData).toHaveBeenCalledWith(expect.any(Request), imageMedia, "b64_json");
   });
 
@@ -491,7 +491,7 @@ describe("public media protocol route envelopes", () => {
     }));
     expect(response.status).toBe(200);
     expect(mocks.enqueueGeneration).toHaveBeenLastCalledWith(expect.objectContaining({
-      model: "gpt-image-1k-16x9",
+      model: "gpt-image-2",
       payload: expect.objectContaining({
         kind: "image",
         protocol: "openai-images",
@@ -523,7 +523,7 @@ describe("public media protocol route envelopes", () => {
     const form = new FormData();
     form.set("model", "gpt-image-1");
     form.set("prompt", "replace the sky");
-    form.set("size", "1792x1024");
+    form.set("size", "1280x720");
     form.set("quality", "high");
     form.set("output_format", "webp");
     form.set("output_compression", "72");
@@ -539,7 +539,7 @@ describe("public media protocol route envelopes", () => {
     expect(payload).toMatchObject({
       protocol: "openai-edits",
       model: "gpt-image-1k-16x9",
-      size: "1792x1024",
+      size: "1280x720",
       quality: "high",
       output_format: "webp",
       output_compression: 72,
@@ -607,7 +607,7 @@ describe("public media protocol route envelopes", () => {
       headers: { "content-type": "application/json" },
     }));
     expect(imageResponse.status).toBe(200);
-    expect(mocks.enqueueGeneration).toHaveBeenLastCalledWith(expect.objectContaining({ model: "gpt-image-1k-16x9", payload: expect.objectContaining({ kind: "image", images: ["https://cdn.example/ref.png"] }) }));
+    expect(mocks.enqueueGeneration).toHaveBeenLastCalledWith(expect.objectContaining({ model: "gpt-image-2", payload: expect.objectContaining({ kind: "image", requested_model: "gpt-image-2", resolved_model: "gpt-image-1k-16x9", images: ["https://cdn.example/ref.png"] }) }));
 
     const videoResponse = await openAiChat(authRequest("http://api.test/v1/chat/completions", {
       method: "POST",
@@ -615,7 +615,7 @@ describe("public media protocol route envelopes", () => {
       headers: { "content-type": "application/json" },
     }));
     expect(videoResponse.status).toBe(200);
-    expect(mocks.enqueueGeneration).toHaveBeenLastCalledWith(expect.objectContaining({ model: "sora2-8s-16x9", payload: expect.objectContaining({ kind: "video", images: ["data:image/png;base64,cG5n"] }) }));
+    expect(mocks.enqueueGeneration).toHaveBeenLastCalledWith(expect.objectContaining({ model: "sora2", payload: expect.objectContaining({ kind: "video", requested_model: "sora2", resolved_model: "sora2-8s-16x9", images: ["data:image/png;base64,cG5n"] }) }));
   });
 
   it("returns native Gemini image inlineData and video fileData envelopes", async () => {
@@ -626,7 +626,7 @@ describe("public media protocol route envelopes", () => {
     }), { params: Promise.resolve({ path: ["gemini-2.5-flash-image:generateContent"] }) });
     expect(imageResponse.status).toBe(200);
     expect((await imageResponse.json()).candidates[0].content.parts[0]).toEqual({ inlineData: { mimeType: "image/png", data: "ZmFrZS1wbmc=" } });
-    expect(mocks.enqueueGeneration).toHaveBeenLastCalledWith(expect.objectContaining({ model: "gpt-image-1k-16x9", payload: expect.objectContaining({ kind: "image", images: ["data:image/png;base64,cG5n", "https://cdn.example/ref.png"] }) }));
+    expect(mocks.enqueueGeneration).toHaveBeenLastCalledWith(expect.objectContaining({ model: "gpt-image-2", payload: expect.objectContaining({ kind: "image", resolved_model: "gpt-image-1k-16x9", images: ["data:image/png;base64,cG5n", "https://cdn.example/ref.png"] }) }));
 
     mocks.waitForGeneration.mockResolvedValue({ job: queuedJob("gemini-video-job"), media: videoMedia[0], medias: videoMedia });
     mocks.mediaUrl.mockResolvedValue("http://api.test/generated/jobs/gemini-video-job/result-1.mp4");
@@ -663,7 +663,7 @@ describe("public media protocol route envelopes", () => {
     }), { params: Promise.resolve({ path: ["gemini-omni-8s-16x9-720p:generateContent"] }) });
     expect(response.status).toBe(200);
     expect(mocks.enqueueGeneration).toHaveBeenLastCalledWith(expect.objectContaining({
-      model: "gemini-omni-8s-16x9-720p",
+      model: "gemini-omni",
       payload: expect.objectContaining({
         kind: "video",
         duration: 8,
@@ -820,7 +820,7 @@ describe("public media protocol route envelopes", () => {
     expect(response.status).toBe(200);
     expect(mocks.enqueueGeneration).toHaveBeenLastCalledWith(expect.objectContaining({
       apiPath: "/kling/v1/videos/image2video",
-      model: "seedance20-fast-5s-16x9-1080p",
+      model: "seedance20-fast",
       payload: expect.objectContaining({
         protocol: "kling",
         kind: "video",

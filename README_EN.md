@@ -163,84 +163,38 @@ Use one of the following to call the external API:
 
 ### 3.0 Supported model families
 
-Model IDs follow `{family}-{resolution}-{ratio}` or `{family}-{duration}s-{ratio}-{resolution}`. For backward compatibility with older `adobe2api` callers, IDs with a `firefly-` prefix are also accepted (normalized automatically).
+`/v1/models` exposes only 13 stable model families. Aspect ratio, resolution, duration, audio, and reference behavior are selected with request parameters. Internal `resolvedModel` combination IDs are not part of the public API.
 
 #### Image models
 
-Nano Banana / Nano Banana Pro (upstream `nano-banana-2`):
+- Families: `gpt-image-2`, `nano-banana`, `nano-banana-pro`, `nano-banana2`
+- `output_resolution`: `1K`, `2K`, or `4K`
+- Ratios: 1:1, 16:9, 9:16, 4:3, 3:4, 5:4, 4:5, 3:2, 2:3, 21:9; `nano-banana2` also accepts 1:8, 1:4, 4:1, and 8:1
+- `quality`: low/medium/high maps only to Adobe detailLevel 1/3/5 and never changes resolution
+- Defaults: `gpt-image-2` uses 1K/16:9/high; the other families use 2K/16:9/high
+- `size` must exactly match the shared size table and determines both ratio and resolution. Unsupported or conflicting parameters return 400 before enqueue.
 
-- Naming: `nano-banana-{res}-{ratio}` / `nano-banana-pro-{res}-{ratio}`
-- Resolutions: `1k` / `2k` / `4k`
-- Ratio suffixes: `1x1` / `16x9` / `9x16` / `4x3` / `3x4` / `5x4` / `4x5` / `3x2` / `2x3` / `21x9`
-- Examples: `nano-banana-pro-2k-16x9`, `nano-banana-4k-1x1`
-
-Nano Banana 2 (upstream `nano-banana-3`):
-
-- Naming: `nano-banana2-{res}-{ratio}`
-- Resolutions: `1k` / `2k` / `4k`
-- Extra ultra-tall/wide ratios: `1x8` / `1x4` / `4x1` / `8x1`
-- Examples: `nano-banana2-2k-16x9`, `nano-banana2-2k-1x8`
-
-GPT Image (upstream `gpt-image`, version `2`):
-
-- Naming: `gpt-image-{res}-{ratio}`
-- Resolutions: `1k` / `2k` / `4k`
-- Examples: `gpt-image-2k-16x9`, `gpt-image-4k-1x1`
-
-> `aspect_ratio=auto` is **not supported**; passing `auto` falls back to `1:1`. Pass an explicit ratio or use a model ID with a ratio suffix. The default model is `nano-banana-pro-2k-16x9`.
+```json
+{"model":"gpt-image-2","prompt":"futuristic city skyline at dusk","aspect_ratio":"16:9","output_resolution":"4K","quality":"high","response_format":"url"}
+```
 
 #### Video models
 
-Sora2 / Sora2 Pro:
+- `sora2` / `sora2-pro`: 4/8/12 seconds, 16:9 or 9:16, no `resolution`; default 8s/16:9
+- `veo31`: 4/6/8 seconds, 16:9 or 9:16, 720p/1080p, up to two frame images; default 4s/16:9/720p
+- `veo31-ref`: same dimensions, up to three reference images
+- `gemini-omni`: 4/6/8/10 seconds, 16:9 or 9:16, 720p/1080p, up to four images and one video; default 4s/16:9/720p
+- `kling3`: 5/10/15 seconds, 16:9 or 9:16, 720p/1080p, up to two images, audio on by default; default 5s/16:9/720p
+- `kling-o3`: 5/15 seconds, 16:9 or 9:16, 720p/1080p, entity references retained; default 5s/16:9/1080p
+- `seedance20` / `seedance20-fast`: integer 4–15 seconds, 21:9/16:9/4:3/1:1/3:4/9:16, 480p/720p/1080p; up to 9 images, 3 videos, 3 audios, 12 combined. Audio references require a visual reference. Default 8s/16:9/720p with generated audio.
 
-- Naming: `sora2-{dur}s-{ratio}` / `sora2-pro-{dur}s-{ratio}`
-- Durations: `4s` / `8s` / `12s`; ratios: `9x16` / `16x9`
-- Examples: `sora2-4s-16x9`, `sora2-pro-8s-9x16`
+```json
+{"model":"seedance20-fast","prompt":"a cinematic tracking shot","duration":10,"aspect_ratio":"16:9","resolution":"1080p","generate_audio":true}
+```
 
-Veo31 (frame mode):
+#### Legacy compatibility
 
-- Naming: `veo31-{dur}s-{ratio}-{res}`
-- Durations: `4s` / `6s` / `8s`; ratios: `16x9` / `9x16`; resolutions: `720p` / `1080p`
-- 1 reference image = first frame; 2 = first + last frame
-- Example: `veo31-4s-16x9-1080p`
-
-Veo31 Ref (reference-image mode):
-
-- Naming: `veo31-ref-{dur}s-{ratio}-{res}`
-- Up to 3 reference images
-- Example: `veo31-ref-6s-9x16-720p`
-
-Gemini Omni:
-
-- Naming: `gemini-omni-{dur}s-{ratio}-{res}`
-- Durations: `4s` / `6s` / `8s` / `10s`; resolutions: `720p` / `1080p`
-- Up to 4 image references (style) + 1 video reference (source)
-- Compatible IDs without a resolution default to `720p`
-- Example: `gemini-omni-10s-16x9-1080p`
-
-Kling 3.0:
-
-- Naming: `kling3-{dur}s-{ratio}-{res}`
-- Durations: `5s` / `10s` / `15s`; ratios: `16x9` / `9x16`
-- 1 image = first frame, 2 = first + last frame; audio enabled by default
-- Compatible IDs without a resolution default to `720p`
-- Examples: `kling3-5s-16x9-720p`, `kling3-15s-9x16`
-
-Kling O3:
-
-- Naming: `kling-o3-{dur}s-{ratio}-{res}`
-- Durations: `5s` / `15s`; resolutions: `720p` / `1080p`
-- Supports referencing created entities via `@entity:name`
-- Compatible IDs without a resolution default to `1080p`
-- Example: `kling-o3-5s-16x9`
-
-Seedance 2.0 / 2.0 Fast:
-
-- Naming: `seedance20-{dur}s-{ratio}-{res}` / `seedance20-fast-{dur}s-{ratio}-{res}`
-- Durations: `4s` ~ `15s`; ratios: `21x9` / `16x9` / `4x3` / `1x1` / `3x4` / `9x16`; resolutions: `480p` / `720p` / `1080p`
-- Up to 9 images (style) + 3 videos (source) + 3 audios (source), 12 items total
-- Audio references must be paired with at least 1 image or 1 video; audio enabled by default
-- Examples: `seedance20-4s-16x9-480p`, `seedance20-fast-15s-9x16-1080p`
+Legacy combination IDs, including `firefly-` aliases, remain accepted, for example `gpt-image-4k-4x3`, `sora2-8s-9x16`, and `seedance20-fast-12s-9x16-1080p`. Their encoded parameters are fixed; conflicting explicit parameters return 400. Combination IDs are not listed by `/v1/models`, and standard responses use the corresponding family name.
 
 ### 3.1 List models
 
@@ -260,7 +214,9 @@ curl -X POST "http://127.0.0.1:3000/v1/chat/completions" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "nano-banana-pro-2k-16x9",
+    "model": "nano-banana-pro",
+    "aspect_ratio": "16:9",
+    "output_resolution": "2K",
     "messages": [{"role":"user","content":"a cinematic mountain sunrise"}]
   }'
 ```
@@ -272,7 +228,9 @@ curl -X POST "http://127.0.0.1:3000/v1/chat/completions" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "nano-banana-pro-2k-16x9",
+    "model": "nano-banana-pro",
+    "aspect_ratio": "16:9",
+    "output_resolution": "2K",
     "messages": [{
       "role":"user",
       "content":[
@@ -290,7 +248,9 @@ curl -X POST "http://127.0.0.1:3000/v1/chat/completions" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "sora2-4s-16x9",
+    "model": "sora2",
+    "duration": 4,
+    "aspect_ratio": "16:9",
     "messages": [{"role":"user","content":"a drone shot over snowy forest"}]
   }'
 ```
@@ -302,7 +262,9 @@ curl -X POST "http://127.0.0.1:3000/v1/chat/completions" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "sora2-8s-9x16",
+    "model": "sora2",
+    "duration": 8,
+    "aspect_ratio": "9:16",
     "messages": [{
       "role":"user",
       "content":[
@@ -320,7 +282,10 @@ curl -X POST "http://127.0.0.1:3000/v1/chat/completions" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gemini-omni-10s-16x9-1080p",
+    "model": "gemini-omni",
+    "duration": 10,
+    "aspect_ratio": "16:9",
+    "resolution": "1080p",
     "messages": [{
       "role":"user",
       "content":[
@@ -340,7 +305,9 @@ curl -X POST "http://127.0.0.1:3000/v1/images/generations" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "nano-banana-pro-4k-16x9",
+    "model": "nano-banana-pro",
+    "aspect_ratio": "16:9",
+    "output_resolution": "4K",
     "prompt": "futuristic city skyline at dusk"
   }'
 ```
@@ -354,7 +321,9 @@ curl -X POST "http://127.0.0.1:3000/v1/images/edits" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "nano-banana-pro-2k-1x1",
+    "model": "nano-banana-pro",
+    "aspect_ratio": "1:1",
+    "output_resolution": "2K",
     "prompt": "replace the background with a beach",
     "image": "https://example.com/input.jpg"
   }'
@@ -369,7 +338,10 @@ curl -X POST "http://127.0.0.1:3000/v1/video/generations" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "kling3-5s-16x9-720p",
+    "model": "kling3",
+    "duration": 5,
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
     "prompt": "a cat walking in a neon city"
   }'
 ```
@@ -418,7 +390,10 @@ curl -X POST "http://127.0.0.1:3000/v1/chat/completions" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "kling-o3-5s-16x9",
+    "model": "kling-o3",
+    "duration": 5,
+    "aspect_ratio": "16:9",
+    "resolution": "1080p",
     "messages": [{
       "role": "user",
       "content": "A cinematic shot of @entity:PinkWarrior walking through a neon city."

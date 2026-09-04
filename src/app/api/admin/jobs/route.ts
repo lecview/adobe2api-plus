@@ -225,6 +225,7 @@ export async function GET(request: Request) {
         previewPath: asset.url && asset.url.length ? asset.url : mediaPath(asset.objectKey),
       }));
       const resultPayload = asRecord(job.resultPayload);
+      const requestPayload = asRecord(job.requestPayload);
       const creditCost = typeof resultPayload.creditCost === "number" && Number.isFinite(resultPayload.creditCost) ? Math.max(0, resultPayload.creditCost) : null;
       return {
         id: job.id,
@@ -232,6 +233,7 @@ export async function GET(request: Request) {
         kind: job.kind,
         apiPath: job.apiPath,
         model: job.model,
+        resolvedModel: textValue(requestPayload.resolved_model ?? requestPayload.resolvedModel) || job.model,
         account: account ? { id: account.id, displayName: account.displayName, email: account.email } : null,
         errorCode: job.errorCode,
         errorMessage: job.errorCode ? (textValue(job.errorMessage) || safeErrorMessage(job.errorCode, statusForErrorCode(job.errorCode))) : null,

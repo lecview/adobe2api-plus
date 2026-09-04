@@ -50,7 +50,7 @@ describe("cross-provider media compatibility", () => {
   });
 
   it("keeps Kling 3 5s 16:9 dimensions and count through payload creation", () => {
-    const normalized = normalizeVideoRequest({ model: "kling3-5s-16x9", prompt: "a paper plane", width: 1920, height: 1080, n: 2 }, "kling", "text2video");
+    const normalized = normalizeVideoRequest({ model: "kling3", prompt: "a paper plane", width: 1920, height: 1080, n: 2 }, "kling", "text2video");
     const payload = buildVideoPayload({
       model: resolveVideoModel(normalized.model),
       prompt: normalized.prompt,

@@ -145,10 +145,10 @@ export async function POST(request: Request) {
     if (input.videos.length || input.audios.length) throw new AppError("invalid_media_type", "Image references must be images", 400);
     if (hasMask && !input.mask) throw new AppError("invalid_request_error", "mask must contain one image", 400);
     await validateReferenceUrls(input, { total: 4, image: 4, video: 0, audio: 0 });
-    const job = await enqueueGeneration({ apiPath: "/v1/images/edits", model: input.model, payload: input });
+    const job = await enqueueGeneration({ apiPath: "/v1/images/edits", model: input.requested_model, payload: input });
     const result = await waitForGeneration(job.id);
     const data = await openAiImageData(request, result.medias, input.response_format);
-    return Response.json({ created: Math.floor(Date.now() / 1000), model: input.model, data }, { headers: { "x-request-id": requestId } });
+    return Response.json({ created: Math.floor(Date.now() / 1000), model: input.requested_model, data }, { headers: { "x-request-id": requestId } });
   } catch (error) {
     if (error instanceof AppError && error.status < 500) return Response.json(openAiError(error.message, errorType(error), error.code), { status: error.status, headers: { "x-request-id": requestId } });
     return toErrorResponse(error, requestId);
