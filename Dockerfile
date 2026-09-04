@@ -11,6 +11,9 @@ ENV NEXT_PUBLIC_BUILD_SHA=$GIT_SHA
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
+# Runtime entrypoints execute TypeScript through the production `tsx` dependency.
+# Remove lint/test/build tooling and Drizzle CLI from the shipped image.
+RUN npm prune --omit=dev
 
 FROM node:22-alpine AS runner
 WORKDIR /app

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import pkg from "../../package.json";
 import type { LucideIcon } from "lucide-react";
@@ -48,6 +48,7 @@ function isActivePath(pathname: string, href: string) {
 
 export function AdminShell({ children, onLogout }: AdminShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
@@ -64,7 +65,8 @@ export function AdminShell({ children, onLogout }: AdminShellProps) {
   async function handleLogout() {
     if (onLogout) return onLogout();
     await fetch("/api/auth/logout", { method: "POST", headers: { "x-csrf-token": "same-origin" } });
-    window.location.assign("/login");
+    router.push("/login");
+    router.refresh();
   }
 
   return (
