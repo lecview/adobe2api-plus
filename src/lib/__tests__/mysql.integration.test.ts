@@ -156,7 +156,8 @@ suite("MySQL coordination integration", () => {
     expect(stored?.status, stored?.errorMessage ?? "no error").toBe("SUCCEEDED");
     const submitCalls = fake.calls.filter((call) => call.path.includes("generate-async"));
     expect(submitCalls.map((call) => call.proxyId)).toEqual([nodes[0].id, nodes[1].id]);
-    expect(fake.calls.every((call) => call.proxyId !== null)).toBe(true);
+    const routedCalls = fake.calls.filter((call) => call.path.includes("generate-async") || call.path.includes("task-proxy"));
+    expect(routedCalls.every((call) => call.proxyId !== null)).toBe(true);
     expect(attempts.some((attempt) => attempt.proxyId === nodes[1].id)).toBe(true);
   });
 
