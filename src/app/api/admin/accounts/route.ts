@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { and, asc, count, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { adobeAccount, adobeToken, entity, generationJob, refreshProfile, type AdobeTokenStatus, type RefreshProfileStatus } from "@/lib/db/schema";
+import { adobeAccount, adobeToken, refreshProfile, type AdobeTokenStatus, type RefreshProfileStatus } from "@/lib/db/schema";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { requireAdminRequest, handleAdminError } from "@/lib/admin-api";
 import { AppError, getRequestId, safeErrorMessage, statusForErrorCode } from "@/lib/errors";
 import { creditFailureMessage, refreshTokenCredits, refreshTokenCreditsBatch, setRefreshProfileEnabled } from "@/lib/adobe/refresh";
-import { unmarkAdobeAccountRiskFlagged } from "@/lib/adobe/account";
+import { deleteAdobeAccount, unmarkAdobeAccountRiskFlagged } from "@/lib/adobe/account";
 import { allocateProxySnapshot, getProxySettings } from "@/lib/proxy-pool";
 import { getSystemSettings } from "@/lib/system-settings";
 
@@ -932,28 +932,17 @@ export async function DELETE(request: Request) {
     const input = parsed.data;
     const tokenIds = input.ids ?? (input.tokenId ? [input.tokenId] : []);
     if (tokenIds.length) {
-      const tokens = await db.select({ id: adobeToken.id, refreshProfileId: adobeToken.refreshProfileId, autoRefreshEnabled: adobeToken.autoRefreshEnabled }).from(adobeToken).where(inArray(adobeToken.id, tokenIds));
+      const tokens = await db.select({ id: adobeToken.id, accountId: adobeToken.accountId }).from(adobeToken).where(inArray(adobeToken.id, tokenIds));
       if (!tokens.length) throw new AppError("token_not_found", "Token not found", 404);
-      await db.transaction(async (tx) => {
-        await tx.delete(adobeToken).where(inArray(adobeToken.id, tokens.map((token) => token.id)));
-        const profileIds = tokens.filter((token) => token.autoRefreshEnabled && token.refreshProfileId).map((token) => token.refreshProfileId as string);
-        if (profileIds.length) await tx.delete(refreshProfile).where(inArray(refreshProfile.id, profileIds));
-      });
-      return Response.json({ deleted: true, deletedIds: tokens.map((token) => token.id), request_id: getRequestId(request) });
+      const accountIds = [...new Set(tokens.map((token) => token.accountId))];
+      for (const accountId of accountIds) await deleteAdobeAccount(accountId);
+      return Response.json({ deleted: true, deletedIds: tokens.map((token) => token.id), deletedAccountIds: accountIds, request_id: getRequestId(request) });
     }
     if (!input.id) throw new AppError("account_id_required", "Account id is required", 400);
-    const [account] = await db.select({ id: adobeAccount.id, status: adobeAccount.status }).from(adobeAccount).where(eq(adobeAccount.id, input.id)).limit(1);
+    const [account] = await db.select({ id: adobeAccount.id }).from(adobeAccount).where(eq(adobeAccount.id, input.id)).limit(1);
     if (!account) throw new AppError("account_not_found", "Adobe account not found", 404);
-    const [[entityRow], [jobRow]] = await Promise.all([
-      db.select({ value: count() }).from(entity).where(and(eq(entity.accountId, input.id), ne(entity.status, "DELETED"))),
-      db.select({ value: count() }).from(generationJob).where(and(eq(generationJob.adobeAccountId, input.id), inArray(generationJob.status, ["QUEUED", "UPLOADING", "SUBMITTING", "POLLING", "DOWNLOADING", "SUBMISSION_UNKNOWN"]))),
-    ]);
-    const entityCount = Number(entityRow.value);
-    const activeJobs = Number(jobRow.value);
-    if (entityCount > 0 || activeJobs > 0) throw new AppError("account_in_use", "Adobe account still has dependent resources", 409, { entity_count: entityCount, active_jobs: activeJobs });
-    await db.update(adobeAccount).set({ status: "UNAVAILABLE", updatedAt: new Date() }).where(eq(adobeAccount.id, input.id));
-    const [updated] = await db.select({ id: adobeAccount.id, displayName: adobeAccount.displayName, status: adobeAccount.status }).from(adobeAccount).where(eq(adobeAccount.id, input.id)).limit(1);
-    return Response.json({ disabled: true, account: updated, request_id: getRequestId(request) });
+    await deleteAdobeAccount(input.id);
+    return Response.json({ deleted: true, deletedAccountIds: [input.id], request_id: getRequestId(request) });
   } catch (error) { return handleAdminError(error, request); }
 }
 

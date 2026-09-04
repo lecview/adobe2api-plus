@@ -231,7 +231,9 @@ export default function AccountsPage() {
   }, [autoRefreshFilter, query, riskFilter, sourceFilter, statusFilter, tokens]);
   const pageCount = Math.max(1, Math.ceil(filteredTokens.length / pageSize));
   const visibleTokens = useMemo(() => filteredTokens.slice((page - 1) * pageSize, page * pageSize), [filteredTokens, page, pageSize]);
-  const visibleIds = visibleTokens.map((token) => token.id);
+  // Pending Cookie rows do not have a token id. Never include their synthetic
+  // `pending:*` ids in token batch operations.
+  const visibleIds = visibleTokens.filter((token) => token.hasToken).map((token) => token.id);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
 
   const load = useCallback(async () => {
@@ -249,7 +251,10 @@ export default function AccountsPage() {
       }) as TokenRow);
       const tokenAccountIds = new Set(tokenRows.map((token: TokenRow) => token.accountId));
       const pendingRows = (Array.isArray(data.accounts) ? data.accounts : [])
-        .filter((account: Record<string, unknown>) => !tokenAccountIds.has(String(account.id ?? "")))
+        .filter((account: Record<string, unknown>) => {
+          const profiles = Array.isArray(account.refreshProfileDetails) ? account.refreshProfileDetails : [];
+          return !tokenAccountIds.has(String(account.id ?? "")) && profiles.length > 0;
+        })
         .map((account: Record<string, unknown>) => {
           const profiles = Array.isArray(account.refreshProfileDetails) ? account.refreshProfileDetails as Array<Record<string, unknown>> : [];
           const profile = profiles[0];
@@ -578,20 +583,16 @@ export default function AccountsPage() {
   async function deleteToken() {
     if (!deleteTarget) return;
     const target = deleteTarget;
-    const data = await request("DELETE", { tokenId: target.id }, target.id, "delete");
+    const data = await request(
+      "DELETE",
+      target.hasToken ? { tokenId: target.id } : { id: target.accountId },
+      target.id,
+      "delete",
+    );
     if (data) {
-      const deletedIds = new Set(Array.isArray(data.deletedIds) ? data.deletedIds.filter((id: unknown): id is string => typeof id === "string") : [target.id]);
-      const removedTokens = tokens.filter((token) => deletedIds.has(token.id));
-      setTokens((current) => current.filter((token) => !deletedIds.has(token.id)));
-      setSelected((current) => new Set([...current].filter((id) => !deletedIds.has(id))));
-      setSummary((current) => ({
-        total: Math.max(0, current.total - removedTokens.length),
-        active: Math.max(0, current.active - removedTokens.filter((token) => token.status === "active").length),
-        creditsAvailableTotal: current.creditsAvailableTotal - removedTokens.reduce((total, token) => total + (token.creditsAvailable ?? 0), 0),
-      }));
-      setPage((current) => Math.min(current, Math.max(1, Math.ceil(Math.max(0, filteredTokens.length - removedTokens.length) / pageSize))));
       setDeleteTarget(null);
-      toast.success("Token 已删除");
+      await load();
+      toast.success("账号及关联数据已从数据库删除");
     }
   }
 
@@ -806,7 +807,7 @@ export default function AccountsPage() {
                     {token.refreshProfileId ? <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button" aria-label="刷新 Token" disabled={busy || Boolean(busyTokenActions[token.id])} onClick={() => refreshToken(token)}>{busyTokenActions[token.id] === "refresh-token" ? <Loader2 className="account-action-spinner" size={16} aria-hidden="true" /> : <RefreshCw size={16} aria-hidden="true" />}</button></TooltipTrigger><TooltipContent>刷新 Token</TooltipContent></Tooltip> : null}
                     <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button" aria-label="刷新积分" disabled={!token.hasToken || busy || Boolean(busyTokenActions[token.id])} onClick={() => void runAction({ action: "refresh-credits", tokenId: token.id }, "积分刷新完成")}>{busyTokenActions[token.id] === "refresh-credits" ? <Loader2 className="account-action-spinner" size={16} aria-hidden="true" /> : <Coins size={16} aria-hidden="true" />}</button></TooltipTrigger><TooltipContent>刷新积分</TooltipContent></Tooltip>
                     <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button" aria-label="导出账号" disabled={!token.hasToken || busy || Boolean(busyTokenActions[token.id])} onClick={() => void exportAccount(token)}><Download size={16} aria-hidden="true" /></button></TooltipTrigger><TooltipContent>导出账号（导入格式 JSON）</TooltipContent></Tooltip>
-                    <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button admin-icon-button-danger" aria-label="删除 Token" onClick={() => setDeleteTarget(token)} disabled={!token.hasToken || busy || Boolean(busyTokenActions[token.id])}><Trash2 size={16} aria-hidden="true" /></button></TooltipTrigger><TooltipContent>删除 Token</TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><button type="button" className="admin-icon-button admin-icon-button-danger" aria-label="删除账号" onClick={() => setDeleteTarget(token)} disabled={busy || Boolean(busyTokenActions[token.id])}><Trash2 size={16} aria-hidden="true" /></button></TooltipTrigger><TooltipContent>从数据库删除账号</TooltipContent></Tooltip>
                   </div></TableCell>
                 </TableRow>
               )) : <TableRow><TableCell colSpan={9} className="account-table-empty">暂无账号，请点击上方“新增账号”。</TableCell></TableRow>}
@@ -819,8 +820,8 @@ export default function AccountsPage() {
     <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !busy && !(deleteTarget && busyTokenActions[deleteTarget.id] === "delete")) setDeleteTarget(null); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>确认删除 Token？</AlertDialogTitle>
-          <AlertDialogDescription>确定删除「{deleteTarget?.accountName ?? "当前账号"}」的 Token 吗？删除后无法恢复。</AlertDialogDescription>
+          <AlertDialogTitle>确认删除账号？</AlertDialogTitle>
+          <AlertDialogDescription>确定从数据库删除「{deleteTarget?.accountName ?? "当前账号"}」及其 Token、Cookie 刷新配置吗？任务历史会保留账号快照，删除操作无法恢复。</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy || Boolean(deleteTarget && busyTokenActions[deleteTarget.id] === "delete")}>取消</AlertDialogCancel>
