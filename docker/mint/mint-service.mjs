@@ -17,7 +17,7 @@
  * - 铸造页 loads 走直连即可（好 token 不挑铸造 IP），提交链路代理 IP 由应用侧另管。
  */
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -61,6 +61,14 @@ async function waitForCdp(port, attempts = 60) {
 
 async function launchChromium() {
   const profileDir = await mkdtemp(path.join(tmpdir(), "fp-mint-"));
+  const configDir = path.join(profileDir, "xdg-config");
+  const cacheDir = path.join(profileDir, "xdg-cache");
+  const crashDir = path.join(profileDir, "crash-dumps");
+  await Promise.all([
+    mkdir(configDir, { recursive: true }),
+    mkdir(cacheDir, { recursive: true }),
+    mkdir(crashDir, { recursive: true }),
+  ]);
   const cdpPort = 20000 + Math.floor(Math.random() * 15000);
   const seed = Math.floor(10000 + Math.random() * 90000);
   const args = [
@@ -75,6 +83,9 @@ async function launchChromium() {
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-background-networking",
+    "--disable-breakpad",
+    "--disable-crash-reporter",
+    `--crash-dumps-dir=${crashDir}`,
     "--disable-component-update",
     "--disable-sync",
     "--metrics-recording-only",
@@ -84,7 +95,15 @@ async function launchChromium() {
     "--window-size=1366,768",
   ];
   if (HEADLESS) args.push("--headless=new");
-  const child = spawn(CHROME_BIN, args, { stdio: ["ignore", "ignore", "pipe"] });
+  const child = spawn(CHROME_BIN, args, {
+    stdio: ["ignore", "ignore", "pipe"],
+    env: {
+      ...process.env,
+      HOME: profileDir,
+      XDG_CONFIG_HOME: configDir,
+      XDG_CACHE_HOME: cacheDir,
+    },
+  });
   child.stderr.on("data", (chunk) => {
     const text = String(chunk);
     if (/crash|FATAL/i.test(text)) console.error("[fpchrome]", text.trim().slice(0, 300));
@@ -218,3 +237,4 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`[mint-service] listening :${PORT} headless=${HEADLESS} chrome=${CHROME_BIN} display=${process.env.DISPLAY ?? "(none)"}`);
 });
+
