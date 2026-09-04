@@ -1,89 +1,53 @@
 # KR deployment and upgrade procedure
 
-Last updated: 2026-09-04 13:56 (Asia/Shanghai).
+Last updated: 2026-09-04 23:00 (Asia/Shanghai).
 
-## Source, CI and immutable images
+## Current immutable deployment
 
-- Upstream baseline: `songsongQAQ/adobe2api-plus@011813639b99a51f0e16d8e51481147c578d102c`, tree `866ccc5eb6ea08a855f06b1d789fa751b2766afd`.
-- Fork comparison at audit time: `lecview` ahead 0 / behind 0 before AIMasker changes.
-- Deployed source/image commit: `01e4de394808e374c64b5073cedec99c5dad7867`.
-- CI run: `https://github.com/lecview/adobe2api-plus/actions/runs/33839374314`.
-- Release: `https://github.com/lecview/adobe2api-plus/releases/tag/deployment-01e4de394808e374c64b5073cedec99c5dad7867`.
-- Release archive: `adobe2api-plus-images-01e4de394808e374c64b5073cedec99c5dad7867-33839374314-1.tar.zst`, 560,914,396 bytes, SHA-256 `767b6f5384ca56a5cd9785a65da518da7d5ee53003dec4f73e40437a96d459d3`.
-- OCI config digests: Web `sha256:e2bc2d0b2ba7909cccec8c2a4208d15408ba5ee4f1228b49b1dc2a3b96cd60dc`; mint `sha256:9b034d6ba3508b14409e9ca80f6d1b5a1d3b039c7e88aff846b6738017f5145b`.
-- OCI archive manifests / KR containerd image IDs: Web `sha256:858abf5d999a676f357d41c2c3a93ec3251bb0100881ead418c73f2af9fd08b4`; mint `sha256:4503caed8022a9f0341103ce202c3baee5e4ebe77866f0d3e8ce492620c33eb6`.
-- Build metadata manifest digests: Web `sha256:a6658e3453a4637f8d45581717edbe821b6498774d3097a96e53ac97daf76eeb`; mint `sha256:a5c86f53146cdeb12241a97cf92384c3acb44e476bdc4c2647dd3f93964624ac`.
+- Source/deployment commit: `5a0134f723fd70fb5685131677affbf09e7708da`.
+- Pull request: `https://github.com/lecview/adobe2api-plus/pull/1`.
+- Successful linux/amd64 workflow: `https://github.com/lecview/adobe2api-plus/actions/runs/33884343710`.
+- Release: `https://github.com/lecview/adobe2api-plus/releases/tag/deployment-5a0134f723fd70fb5685131677affbf09e7708da`.
+- Archive: `adobe2api-plus-images-5a0134f723fd70fb5685131677affbf09e7708da-33884343710-1.tar.zst`, 561,258,554 bytes, SHA-256 `2e934d7e77026d374c051ac180f81d6315d329c708bd5f12f3c43bb732169829`.
+- CI OCI config digests: Web `sha256:42f7074d46ffe6ffe5c667197a11f62237d4c034b246d1ecb4bc057687ab0dbc`; mint `sha256:04e13da2d0b92f5651f67fe1593e2f3b2386269242b662225724f3ef5b0d2278`.
+- KR Docker manifest/image ID for the loaded Web image: `sha256:bb9496a43ca32b1df0cccb5e00adc20677a2491144c2bc9c2aed31c5507f423b`.
 
-The release archive and every file listed by its internal checksum manifest were verified before `docker load`. KR did not build images. The Web image was also run once with `--network none` to verify linux/amd64, Node 22.23.2, Next 16.3.4 and production mode. The differing CI/KR display IDs are expected: CI reported the OCI config digest while the Docker 29 containerd store reports the OCI manifest digest; both referenced objects and all layers are present in the verified archive.
+The release archive and every file in its checksum manifest were verified before `docker load`. KR did not build images. CI passed lint, typecheck, MySQL migration/integration coverage, the test suite, production high-severity dependency audit, production build and isolated Compose expansion.
 
-CI passed lint, typecheck, explicit migration, production build, Compose expansion, the production high-severity dependency audit and 208 tests with 4 skips (212 total), including all 16 MySQL integration tests. The production high-severity audit gate passed; four moderate development-only transitive findings remained locally and are not claimed as zero-risk.
+## Production layout
 
-## Production values
-
-| Item | Deployed value |
+| Item | Value |
 |---|---|
-| Host | KR `VM-4-190-ubuntu`, public IPv4 `43.128.140.43`, linux/amd64 |
+| Host | KR `VM-4-190-ubuntu`, `43.128.140.43`, linux/amd64 |
 | Server directory | `/opt/adobe2api-plus` |
-| Compose file | `/opt/adobe2api-plus/deploy/kr/docker-compose.yml` |
 | Compose project | `aimasker-adobe2api-plus` |
+| Compose file | `/opt/adobe2api-plus/deploy/kr/docker-compose.yml` |
+| Private environment | `/opt/adobe2api-plus/private/.env`, root:root, `0600` |
 | Public hostname | `adobe2api.aimasker.com` |
-| Host-only endpoint | `127.0.0.1:8300` (Nginx loopback bridge) |
-| Internal network | `aimasker-adobe2api-plus_backend`, `172.30.83.0/24`, internal |
-| Web internal address | `172.30.83.3:3000`, no default route |
+| Host-only bridge | `127.0.0.1:8300` via independent Nginx listener |
+| Networks | `aimasker-adobe2api-plus_backend`; Worker/mint also use `aimasker-adobe2api-plus_egress` |
 | Volumes | `aimasker-adobe2api-plus_mysql-data`, `aimasker-adobe2api-plus_generated-media` |
-| Runtime environment | `/opt/adobe2api-plus/private/.env`, root:root, mode `0600` |
-| DNS | unproxied A `adobe2api.aimasker.com -> 43.128.140.43`, Cloudflare TTL automatic |
-| Certificate | existing `aimasker.com` / `*.aimasker.com` ECDSA certificate, expires 2026-11-28 |
+| DNS | unproxied A to `43.128.140.43`, TTL 300 at final check |
+| Certificate | `aimasker.com` / `*.aimasker.com`, expires 2026-11-28 |
 
 Resource/log limits:
 
 | Service | CPU | Memory | PIDs | Log rotation | Host ports |
 |---|---:|---:|---:|---|---|
 | MySQL | 0.35 | 512 MiB | 256 | json-file 10 MiB x 3 | none |
-| Web | 0.45 | 640 MiB | 256 | json-file 10 MiB x 3 | none; reached through host Nginx 127.0.0.1:8300 |
-| Worker (disabled profile) | 0.35 | 512 MiB | 256 | json-file 10 MiB x 3 | none |
-| mint (disabled profile) | 0.50 | 768 MiB | 384 | json-file 10 MiB x 3 | none |
+| Web | 0.45 | 640 MiB | 256 | json-file 10 MiB x 3 | none; Nginx loopback only |
+| Worker | 0.35 | 512 MiB | 256 | json-file 10 MiB x 3 | none |
+| mint | 0.50 | 768 MiB | 384 | json-file 10 MiB x 3 | none |
 
-At the post-deployment snapshot MySQL used about 370.5 MiB and Web 135.3 MiB; host memory available was 2.1 GiB and disk free 44 GiB. Worker/mint were absent, so their limits consumed no resources.
+## Deployment performed
 
-## Independent Nginx chain
-
-Only these files belong to this deployment:
-
-- `/etc/nginx/conf.d/adobe2api-plus-websocket-map.conf`
-- `/etc/nginx/sites-available/adobe2api-plus-loopback.conf`
-- `/etc/nginx/sites-enabled/adobe2api-plus-loopback.conf`
-- `/etc/nginx/sites-available/adobe2api.aimasker.com.conf`
-- `/etc/nginx/sites-enabled/adobe2api.aimasker.com.conf`
-
-The loopback listener proxies `127.0.0.1:8300` to the fixed internal Web address. The TLS virtual host proxies to that loopback listener and includes 128 MiB upload allowance, 3600-second long-request timeouts, disabled request/response buffering, WebSocket upgrade headers, real client IP overwrite for a DNS-only origin, HSTS, frame/content/referrer/permissions/CSP headers and hidden `X-Powered-By`. Every change passed `nginx -t`; Nginx was reloaded, not restarted.
-
-## Initial deployment and verification sequence
-
-1. Snapshot Sub2API containers, ports, networks, volumes, resources, Nginx hash and public status.
-2. Pin MySQL by registry digest and download the immutable CI release archive.
-3. Verify release SHA-256 and internal checksums; load, but do not run, mint.
-4. Generate strong random values into the ignored local private file and install the server environment as mode `0600`.
-5. Validate Compose default services are exactly MySQL and Web; create only the internal backend network and named volumes.
-6. Start MySQL/Web, wait for health, perform one server-side administrator bootstrap, and verify cookie flags without printing credentials.
-7. Stop/start only this project's MySQL/Web, verify health and persisted counts.
-8. Install Nginx candidates, run `nginx -t`, enable, run `nginx -t`, and reload Nginx only.
-9. Create or verify only the exact Cloudflare A record; refuse conflicting records.
-10. Verify login/static files, health, HTTPS/certificate, security headers and unauthenticated rejection. Do not send generation requests with valid credentials.
-11. Recheck Sub2API and existing sites against the timestamped baseline.
-
-## Upstream profile — explicit approval required
-
-Do not run the following during the safe deployment:
-
-```sh
-sudo docker compose \
-  --env-file /opt/adobe2api-plus/private/.env \
-  -f /opt/adobe2api-plus/deploy/kr/docker-compose.yml \
-  --profile upstream up -d mint worker
-```
-
-The Worker's first periodic loop can request a Sherlock token; mint then opens Adobe Firefly and loads the Adobe Sherlock SDK. Enabling this profile creates the project egress network and causes upstream access even with no Adobe account imported. It therefore requires explicit user approval and a fresh resource check.
+1. Captured production container, network, volume, port, resource, HTTP and Nginx-hash baselines.
+2. Waited for CI and immutable release success; verified the archive manifest on KR and loaded the linux/amd64 images.
+3. Updated only `DEPLOY_SHA` and `WEB_IMAGE` in the mode-0600 environment. The deployment did not change the Compose file, Nginx, DNS, MySQL image/volume or mint container.
+4. Recreated only this project's Web and Worker with `--no-deps --force-recreate --wait`.
+5. Verified health, HTTPS/static assets, unauthorized rejection, 13 authenticated model families, fail-fast parameter validation, remote-URL mode and log error counts without sending a generation request.
+6. With no live jobs or valid leases, restarted only Web/Worker and verified both returned healthy.
+7. Captured the post-deployment snapshot and rechecked existing sites.
 
 ## Upgrade flow
 
