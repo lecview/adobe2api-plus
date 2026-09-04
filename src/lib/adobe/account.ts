@@ -7,7 +7,7 @@ import { getSystemSettings } from "@/lib/system-settings";
 import { completeSherlockFromCookie } from "@/lib/adobe/arp";
 
 export type AdobeAccountContext = { accountId: string; tokenId: string; token: string };
-export type AdobeGenerationAccountContext = AdobeAccountContext & { refreshProfileId: string; arpSessionId: string };
+export type AdobeGenerationAccountContext = AdobeAccountContext & { refreshProfileId: string | null; arpSessionId: string };
 
 // 构造 token 过滤条件的公共谓词：ACTIVE 且未过期
 function activeTokenPredicate(now: Date) {
@@ -127,7 +127,9 @@ export async function selectAdobeAccount(accountId?: string | null, currentJobId
 
 /**
  * 每个生图任务都重新从数据库构造合格账号池，并在池内随机选择一次。
- * Token、Cookie 与 Sherlock 必须来自同一账号；明确 408 重试时可排除已尝试账号重新随机。
+ * Token 必须属于候选账号。全局 Sherlock 存在时允许纯手动 Token；
+ * 全局 Sherlock 缺失时，才从该 Token 绑定的 Cookie 刷新档案中回退提取。
+ * 明确 408 重试时可排除已尝试账号重新随机。
  */
 export async function selectAdobeGenerationAccount(
   accountId?: string | null,
@@ -146,38 +148,43 @@ export async function selectAdobeGenerationAccount(
       encryptedAccessToken: adobeToken.encryptedAccessToken,
       refreshProfileId: refreshProfile.id,
       profileAccountId: refreshProfile.accountId,
+      profileStatus: refreshProfile.status,
+      profileEnabled: refreshProfile.enabled,
       encryptedCookie: refreshProfile.encryptedCookie,
       sherlockToken: refreshProfile.sherlockToken,
     })
     .from(adobeAccount)
     .innerJoin(adobeToken, eq(adobeAccount.id, adobeToken.accountId))
-    .innerJoin(refreshProfile, eq(adobeToken.refreshProfileId, refreshProfile.id))
+    .leftJoin(refreshProfile, eq(adobeToken.refreshProfileId, refreshProfile.id))
     .where(and(
       eq(adobeAccount.status, "AVAILABLE" as AdobeAccountStatus),
       eq(adobeAccount.riskFlagged, false),
       activeTokenPredicate(now),
-      eq(refreshProfile.status, "ACTIVE" as RefreshProfileStatus),
-      eq(refreshProfile.enabled, true),
-      eq(refreshProfile.accountId, adobeAccount.id),
       accountId ? eq(adobeAccount.id, accountId) : undefined,
     ))
     .orderBy(desc(adobeToken.updatedAt), desc(refreshProfile.updatedAt));
 
+  let globalToken = "";
+  try {
+    const { getGlobalSherlockStatus } = await import("@/lib/adobe/sherlock");
+    globalToken = (await getGlobalSherlockStatus()).token?.trim() ?? "";
+  } catch {
+    // 全局单例不可用时，下方仍可回退到账号自身 Cookie。
+  }
+
   const candidates = new Map<string, AdobeGenerationAccountContext>();
   for (const row of rows) {
-    if ((accountId && row.accountId !== accountId) || excludedAccountIds.has(row.accountId) || row.profileAccountId !== row.accountId || candidates.has(row.accountId)) continue;
+    if ((accountId && row.accountId !== accountId) || excludedAccountIds.has(row.accountId) || candidates.has(row.accountId)) continue;
+    const hasProfile = Boolean(row.refreshProfileId);
+    if (hasProfile && (
+      row.profileAccountId !== row.accountId
+      || row.profileStatus !== ("ACTIVE" as RefreshProfileStatus)
+      || row.profileEnabled !== true
+      || !row.encryptedCookie
+    )) continue;
     try {
       const token = decryptSecret(row.encryptedAccessToken);
-      // sherlockToken 为全局单例（浏览器会话级，与账号无关）：从全局读取；
-      // 全局未设置或读取失败时回退从 cookie 提取四字段（旧数据兼容）。
-      let globalToken = "";
-      try {
-        const { getGlobalSherlockStatus } = await import("@/lib/adobe/sherlock");
-        globalToken = (await getGlobalSherlockStatus()).token?.trim() ?? "";
-      } catch {
-        // 全局读取失败（如旧库无字段/测试环境）不阻塞，回退 cookie 提取
-      }
-      const arpSessionId = globalToken || completeSherlockFromCookie(decryptSecret(row.encryptedCookie));
+      const arpSessionId = globalToken || (row.encryptedCookie ? completeSherlockFromCookie(decryptSecret(row.encryptedCookie)) : "");
       if (!arpSessionId) continue;
       candidates.set(row.accountId, {
         accountId: row.accountId,
@@ -323,3 +330,4 @@ export async function markAdobeTokenSuccess(tokenId: string) {  await db
     .where(eq(adobeToken.id, tokenId))
     .catch(() => undefined);
 }
+

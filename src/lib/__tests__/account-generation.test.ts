@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   select: vi.fn(),
   decryptSecret: vi.fn(),
   getSystemSettings: vi.fn(),
+  getGlobalSherlockStatus: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -18,14 +19,7 @@ vi.mock("@/lib/system-settings", () => ({ getSystemSettings: mocks.getSystemSett
 // 全局 sherlock 单例在测试环境不可用（db mock 无 systemSetting 表），
 // selectAdobeGenerationAccount 应回退到 cookie 提取；此处 mock 返回空状态。
 vi.mock("@/lib/adobe/sherlock", () => ({
-  getGlobalSherlockStatus: vi.fn().mockResolvedValue({
-    token: null,
-    expiresAt: null,
-    source: null,
-    updatedAt: null,
-    remainingSeconds: null,
-    nextRefreshSeconds: null,
-  }),
+  getGlobalSherlockStatus: mocks.getGlobalSherlockStatus,
 }));
 
 import { selectAdobeGenerationAccount } from "@/lib/adobe/account";
@@ -34,9 +28,11 @@ type CandidateRow = {
   accountId: string;
   tokenId: string;
   encryptedAccessToken: string;
-  refreshProfileId: string;
-  profileAccountId: string;
-  encryptedCookie: string;
+  refreshProfileId: string | null;
+  profileAccountId: string | null;
+  profileStatus: "ACTIVE" | "INVALID" | "DISABLED" | null;
+  profileEnabled: boolean | null;
+  encryptedCookie: string | null;
 };
 
 function sherlock(label: string): string {
@@ -56,7 +52,22 @@ function candidate(accountId: string, cookie = `cookie-${accountId}`): Candidate
     encryptedAccessToken: `token-secret-${accountId}`,
     refreshProfileId: `profile-${accountId}`,
     profileAccountId: accountId,
+    profileStatus: "ACTIVE",
+    profileEnabled: true,
     encryptedCookie: cookie,
+  };
+}
+
+function manualCandidate(accountId: string): CandidateRow {
+  return {
+    accountId,
+    tokenId: `token-id-${accountId}`,
+    encryptedAccessToken: `token-secret-${accountId}`,
+    refreshProfileId: null,
+    profileAccountId: null,
+    profileStatus: null,
+    profileEnabled: null,
+    encryptedCookie: null,
   };
 }
 
@@ -72,7 +83,7 @@ function generationCandidatesQuery(rows: CandidateRow[]) {
   return {
     from: vi.fn(() => ({
       innerJoin: vi.fn(() => ({
-        innerJoin: vi.fn(() => ({
+        leftJoin: vi.fn(() => ({
           where: vi.fn(() => ({
             orderBy: vi.fn().mockResolvedValue(rows),
           })),
@@ -98,6 +109,14 @@ function containsValue(input: unknown, expected: string, seen = new Set<object>(
 describe("generation account selection", () => {
   beforeEach(() => {
     mocks.getSystemSettings.mockResolvedValue({ accountMaxConcurrency: 1 });
+    mocks.getGlobalSherlockStatus.mockResolvedValue({
+      token: null,
+      expiresAt: null,
+      source: null,
+      updatedAt: null,
+      remainingSeconds: null,
+      nextRefreshSeconds: null,
+    });
     mocks.decryptSecret.mockImplementation((value: string) => {
       if (value.startsWith("token-secret-")) return accessToken(value.slice("token-secret-".length));
       if (value.startsWith("cookie-")) return `sherlockToken=${sherlock(value.slice("cookie-".length))}`;
@@ -186,6 +205,26 @@ describe("generation account selection", () => {
     await expect(selectAdobeGenerationAccount()).resolves.toMatchObject({ accountId: "without-tk-platform" });
   });
 
+  it("accepts a manual token without a refresh profile when the global Sherlock token is available", async () => {
+    prepare([manualCandidate("manual")]);
+    mocks.getGlobalSherlockStatus.mockResolvedValueOnce({
+      token: sherlock("global"),
+      expiresAt: new Date(Date.now() + 60_000),
+      source: "manual",
+      updatedAt: new Date(),
+      remainingSeconds: 60,
+      nextRefreshSeconds: 60,
+    });
+
+    await expect(selectAdobeGenerationAccount()).resolves.toMatchObject({
+      accountId: "manual",
+      tokenId: "token-id-manual",
+      refreshProfileId: null,
+      token: accessToken("manual"),
+      arpSessionId: sherlock("global"),
+    });
+  });
+
   it("excludes accounts already attempted by the current task", async () => {
     prepare([candidate("a"), candidate("b")]);
     await expect(selectAdobeGenerationAccount(null, "job-current", new Set(["a"]))).resolves.toMatchObject({ accountId: "b" });
@@ -207,3 +246,4 @@ describe("generation account selection", () => {
     expect(containsValue(where.mock.calls[0]?.[0], "job-current")).toBe(true);
   });
 });
+

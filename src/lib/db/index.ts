@@ -21,6 +21,9 @@ export function getDb(): Database {
     mysql.createPool({
       uri: config.databaseUrl(),
       connectionLimit: config.databasePoolConnectionLimit(),
+      // DATETIME 列统一按 UTC 读写。应用容器保留 Asia/Shanghai 仅用于日志；
+      // 若使用 mysql2 默认的 local 解析，已按 UTC 写入的无时区 DATETIME 会被错读 8 小时。
+      timezone: "Z",
       enableKeepAlive: true,
       // 公网 MySQL 连接可能被中间设备静默断开：空闲连接超过 60s 主动关闭，
       // 下次使用时重建，避免拿到的连接已失效（"Failed query: rollback" 即因此产生）。
@@ -40,3 +43,4 @@ export const db = new Proxy({} as Database, {
     return typeof value === "function" ? value.bind(getDb()) : value;
   },
 });
+

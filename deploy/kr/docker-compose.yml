@@ -28,10 +28,11 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
       MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
-      TZ: Asia/Shanghai
+      TZ: UTC
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
     volumes:
       - mysql-data:/var/lib/mysql
     networks:
@@ -164,4 +165,5 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME}_mysql-data
   generated-media:
     name: ${COMPOSE_PROJECT_NAME}_generated-media
+
 
