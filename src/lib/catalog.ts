@@ -211,7 +211,7 @@ export function resolveVideoModel(modelId?: string | null): VideoModel {
 }
 
 export function isVideoModel(modelId?: string | null): boolean {
-  return Boolean(modelId && (VIDEO_MODEL_CATALOG[modelId] || isVideoProviderAlias(modelId)));
+  return Boolean(modelId && (VIDEO_MODEL_CATALOG[modelId] || isVideoProviderAlias(modelId) || ["sora2", "sora2-pro", "veo31", "veo31-ref", "gemini-omni", "kling3", "kling-o3", "seedance20", "seedance20-fast"].includes(modelId.replace(/^firefly-/, ""))));
 }
 
 export function ratioFromSize(size: unknown): string {
@@ -252,8 +252,13 @@ function inferredTier(size: string): string | null {
   return "4K";
 }
 
-export function publicModelList() {
+export function publicModelList(): Array<{ id: string; object: string; owned_by: string; description: string }> {
   // `owned_by` 是旧 adobe2api 的可观察契约；应用内部虽已迁移为
   // adobe2api-plus，公开字段继续保持原值，避免下游按供应方筛选时发生破坏性变化。
-  return [...Object.values(IMAGE_MODEL_CATALOG), ...Object.values(VIDEO_MODEL_CATALOG)].map((model) => ({ id: model.id, object: "model", owned_by: "adobe2api", description: model.description }));
+  const families = [
+    ["gpt-image-2", "GPT Image 2"], ["nano-banana", "Nano Banana"], ["nano-banana-pro", "Nano Banana Pro"], ["nano-banana2", "Nano Banana 2"],
+    ["sora2", "Sora 2"], ["sora2-pro", "Sora 2 Pro"], ["veo31", "Veo 3.1 frame video"], ["veo31-ref", "Veo 3.1 reference video"],
+    ["gemini-omni", "Gemini Omni video"], ["kling3", "Kling 3.0"], ["kling-o3", "Kling O3"], ["seedance20", "Seedance 2.0"], ["seedance20-fast", "Seedance 2.0 Fast"],
+  ] as const;
+  return families.map(([id, description]) => ({ id, object: "model", owned_by: "adobe2api", description }));
 }

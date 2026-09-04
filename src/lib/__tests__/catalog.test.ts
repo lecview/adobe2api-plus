@@ -1,10 +1,11 @@
-import { DEFAULT_MODEL_ID, publicModelList, referenceLimitsForVideo, resolveImageOptions, VIDEO_MODEL_CATALOG } from "@/lib/catalog";
+import { publicModelList, referenceLimitsForVideo, VIDEO_MODEL_CATALOG } from "@/lib/catalog";
+import { resolveMediaRouting } from "@/lib/media-model-routing";
 
 describe("model catalog", () => {
   it("publishes the default model and deterministic ratio options", () => {
-    expect(publicModelList().some((model) => model.id === DEFAULT_MODEL_ID)).toBe(true);
-    expect(resolveImageOptions({}).aspectRatio).toBe("16:9");
-    expect(resolveImageOptions({ aspect_ratio: "unsupported" }).aspectRatio).toBe("16:9");
+    expect(publicModelList().some((model) => model.id === "nano-banana-pro")).toBe(true);
+    expect(resolveMediaRouting({}, "image").aspectRatio).toBe("16:9");
+    expect(() => resolveMediaRouting({ aspect_ratio: "unsupported" }, "image")).toThrow();
   });
 
   it("publishes legacy Veo reference models and exact media limits", () => {
@@ -14,8 +15,8 @@ describe("model catalog", () => {
     expect(referenceLimitsForVideo(VIDEO_MODEL_CATALOG["seedance20-4s-16x9-480p"])).toMatchObject({ total: 12, image: 9, video: 3, audio: 3 });
   });
 
-  it("honors normalized explicit image dimensions over catalog defaults", () => {
-    expect(resolveImageOptions({ model: "gpt-image-2k-16x9", aspect_ratio: "1:1", output_resolution: "1K" })).toMatchObject({ aspectRatio: "1:1", outputResolution: "1K" });
+  it("rejects dimensions that conflict with a legacy model ID", () => {
+    expect(() => resolveMediaRouting({ model: "gpt-image-2k-16x9", aspect_ratio: "1:1", output_resolution: "1K" }, "image")).toThrow();
   });
 
   it("publishes separate Kling3 and Kling O3 resolution variants", () => {

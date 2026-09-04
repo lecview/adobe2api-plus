@@ -7,6 +7,7 @@ import { AppError, getRequestId } from "@/lib/errors";
 import { config } from "@/lib/config";
 import { hashSecret } from "@/lib/crypto";
 import { getSystemSettings, systemSettingCreateData, systemSettingsResponse, type SystemSettings } from "@/lib/system-settings";
+import { normalizePublicModels } from "@/lib/media-model-routing";
 
 const schema = z.object({
   proxyEnabled: z.boolean().optional(),
@@ -91,7 +92,7 @@ function mergeSettings(current: SystemSettings, input: SettingsInput): SystemSet
     proxyEnabled: firstDefined<boolean>(input, "proxyEnabled", "use_proxy") ?? current.proxyEnabled,
     mediaRoot: input.mediaRoot ?? current.mediaRoot,
     mediaRetentionDays: input.mediaRetentionDays ?? current.mediaRetentionDays,
-    publicModels: input.publicModels === undefined ? current.publicModels : input.publicModels,
+    publicModels: input.publicModels === undefined ? current.publicModels : input.publicModels === null ? null : normalizePublicModels(input.publicModels),
     publicBaseUrl: normalizeUrl(firstDefined<string>(input, "publicBaseUrl", "public_base_url"), "publicBaseUrl") ?? current.publicBaseUrl,
     adobeBaseUrl: normalizeUrl(input.adobeBaseUrl, "adobeBaseUrl") ?? current.adobeBaseUrl,
     generateTimeoutSeconds: firstDefined<number>(input, "generateTimeoutSeconds", "generate_timeout") ?? current.generateTimeoutSeconds,
