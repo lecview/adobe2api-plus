@@ -24,13 +24,21 @@ const suite = enabled ? describe : describe.skip;
 class ProxyRoutingTransport implements AdobeTransport {
   readonly calls: Array<{ path: string; proxyId: string | null }> = [];
 
-  constructor(private readonly failingProxyIds: Set<string>, private readonly businessFailure = false, private readonly bodyFailureProxyId?: string) {}
+  constructor(
+    private readonly failingProxyIds: Set<string>,
+    private readonly businessFailure = false,
+    private readonly bodyFailureProxyId?: string,
+    private readonly connectionFailure = false,
+  ) {}
 
   async request<T = unknown>(options: AdobeRequestOptions): Promise<AdobeResponse<T>> {
     const proxyId = options.proxy?.id ?? null;
     this.calls.push({ path: options.path, proxyId });
     if (options.path.includes("generate-async")) {
       if (this.businessFailure) return { status: 400, headers: {}, data: { error: "invalid request" } as T };
+      if (this.connectionFailure && proxyId && this.failingProxyIds.has(proxyId)) {
+        throw new AppError("adobe_transport_error", "proxy connection failed before submit", 503, { kind: "connection", proxyEligible: true });
+      }
       if (proxyId && this.failingProxyIds.has(proxyId)) return { status: 408, headers: {}, data: { error_code: "timeout_error", message: "system under load" } as T };
       return { status: 200, headers: { "x-override-status-link": "https://poll.example.test/task-proxy" }, data: {} as T };
     }
@@ -139,7 +147,7 @@ suite("MySQL coordination integration", () => {
     const snapshot: ProxySnapshot = { mode: "proxy", selectedIndex: 0, entries: nodes.map((node): ProxySnapshotEntry => ({ id: node.id, version: node.version, protocol: node.protocol, host: node.host, port: node.port, encryptedUsername: node.encryptedUsername, encryptedPassword: node.encryptedPassword })) };
     const accountId = randomUUID();
     await insertGenerationAccount(accountId, `${prefix}-routing`, `${prefix}-token`);
-    const fake = new ProxyRoutingTransport(new Set([nodes[0].id]));
+    const fake = new ProxyRoutingTransport(new Set([nodes[0].id]), false, undefined, true);
     const job = await createJob({ apiPath: "/integration/routing", model: DEFAULT_MODEL_ID, adobeAccountId: accountId, requestPayload: { prompt: "routing test", model: DEFAULT_MODEL_ID, resolved_aspect_ratio: "16:9", resolved_output_resolution: "2K" }, proxySnapshot: snapshot });
     expect(await claimNextJob(`${prefix}-routing-worker`)).toMatchObject({ id: job.id });
     await processJob(job.id, `${prefix}-routing-worker`, { transport: fake });
@@ -147,7 +155,7 @@ suite("MySQL coordination integration", () => {
     const attempts = await db.select().from(jobAttempt).where(eq(jobAttempt.jobId, job.id));
     expect(stored?.status, stored?.errorMessage ?? "no error").toBe("SUCCEEDED");
     const submitCalls = fake.calls.filter((call) => call.path.includes("generate-async"));
-    expect(submitCalls.map((call) => call.proxyId)).toEqual([nodes[0].id, nodes[0].id, nodes[1].id]);
+    expect(submitCalls.map((call) => call.proxyId)).toEqual([nodes[0].id, nodes[1].id]);
     expect(fake.calls.every((call) => call.proxyId !== null)).toBe(true);
     expect(attempts.some((attempt) => attempt.proxyId === nodes[1].id)).toBe(true);
   });
@@ -167,7 +175,7 @@ suite("MySQL coordination integration", () => {
     expect(attempts.map((attempt) => attempt.proxyId)).toEqual([nodes[0].id]);
   });
 
-  it("does not replay an explicit-account submit timeout or a business error", async () => {
+  it("retries an explicit timeout only on the same proxy and never replays a business error", async () => {
     const nodes = await db.select().from(proxyNode).where(inArray(proxyNode.displayOrder, orders)).orderBy(proxyNode.displayOrder);
     const snapshot: ProxySnapshot = { mode: "proxy", selectedIndex: 0, entries: nodes.map((node): ProxySnapshotEntry => ({ id: node.id, version: node.version, protocol: node.protocol, host: node.host, port: node.port, encryptedUsername: node.encryptedUsername, encryptedPassword: node.encryptedPassword })) };
     const accountId = randomUUID();
@@ -179,7 +187,7 @@ suite("MySQL coordination integration", () => {
     const [exhaustedStored] = await db.select().from(generationJob).where(eq(generationJob.id, exhaustedJob.id)).limit(1);
     expect(exhaustedStored?.status, exhaustedStored?.errorMessage ?? "no error").toBe("FAILED");
     expect(exhaustedStored?.errorCode).toBe("adobe_submit_timeout");
-    expect(exhausted.calls.map((call) => call.proxyId)).toEqual([nodes[0].id]);
+    expect(exhausted.calls.map((call) => call.proxyId)).toEqual([nodes[0].id, nodes[0].id, nodes[0].id]);
     expect(exhausted.calls.every((call) => call.proxyId !== null)).toBe(true);
 
     const business = new ProxyRoutingTransport(new Set(), true);
@@ -219,7 +227,7 @@ suite("MySQL coordination integration", () => {
     const rollbackSource = path.join(legacyRoot, "data", "generated", "rollback.png");
     await writeFile(rollbackSource, Buffer.from("rollback-fixture"));
     await directMysql("DROP TRIGGER IF EXISTS `adobe2api_plus_it_media_fail`");
-    await directMysql("CREATE TRIGGER `adobe2api_plus_it_media_fail` BEFORE INSERT ON `MediaAsset` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced rollback'");
+    await directMysql("CREATE TRIGGER `adobe2api_plus_it_media_fail` BEFORE INSERT ON `mediaasset` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced rollback'");
     const [jobCountBefore] = await db.select({ value: count() }).from(generationJob);
     const jobsBeforeRollback = Number(jobCountBefore.value);
     try {
