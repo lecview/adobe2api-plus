@@ -47,7 +47,7 @@ describe("remote media safety", () => {
   });
 
   it("rejects oversized inline media before enqueue", async () => {
-    await expect(validateReferenceUrls({ image_url: `data:image/png;base64,${"A".repeat(15 * 1024 * 1024)}` }, 1)).rejects.toMatchObject({ code: "media_too_large" });
+    await expect(validateReferenceUrls({ image_url: `data:image/png;base64,${"A".repeat(41 * 1024 * 1024)}` }, 1)).rejects.toMatchObject({ code: "media_too_large" });
   });
 
   it("validates inline media MIME types and base64 before enqueue", async () => {

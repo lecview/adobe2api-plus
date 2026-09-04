@@ -1,0 +1,164 @@
+name: ${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}
+
+x-json-logging: &json-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app-environment: &app-environment
+  DATABASE_URL: mysql://${MYSQL_USER:?MYSQL_USER is required}:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@mysql:3306/${MYSQL_DATABASE:?MYSQL_DATABASE is required}?connectionLimit=8
+  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+  ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:?ADMIN_BOOTSTRAP_USERNAME is required}
+  ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:?ADMIN_BOOTSTRAP_PASSWORD is required}
+  MEDIA_ROOT: /app/data/generated
+  PUBLIC_BASE_URL: https://adobe2api.aimasker.com
+  SHERLOCK_MINT_API: http://mint:8777
+  NEXT_TELEMETRY_DISABLED: "1"
+  TZ: Asia/Shanghai
+
+services:
+  mysql:
+    image: ${MYSQL_IMAGE:?MYSQL_IMAGE must be pinned by digest}
+    container_name: ${COMPOSE_PROJECT_NAME}-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    cpus: "0.35"
+    mem_limit: 512m
+    pids_limit: 256
+    stop_grace_period: 60s
+    logging: *json-logging
+
+  web:
+    image: ${WEB_IMAGE:?WEB_IMAGE is required}
+    pull_policy: never
+    container_name: ${COMPOSE_PROJECT_NAME}-web
+    restart: unless-stopped
+    environment: *app-environment
+    ports:
+      - 127.0.0.1:${WEB_PORT:?WEB_PORT is required}:3000
+    volumes:
+      - generated-media:/app/data
+    networks:
+      - backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+    cpus: "0.45"
+    mem_limit: 640m
+    pids_limit: 256
+    stop_grace_period: 30s
+    logging: *json-logging
+
+  mint:
+    profiles: ["upstream"]
+    image: ${MINT_IMAGE:?MINT_IMAGE is required}
+    pull_policy: never
+    platform: linux/amd64
+    container_name: ${COMPOSE_PROJECT_NAME}-mint
+    restart: unless-stopped
+    environment:
+      MINT_CHROME_BIN: /opt/fpchrome/chrome
+      MINT_PORT: "8777"
+      MINT_HEADLESS: "0"
+      TZ: Asia/Shanghai
+    networks:
+      - backend
+      - egress
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=512m
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cpus: "0.50"
+    mem_limit: 768m
+    pids_limit: 384
+    stop_grace_period: 30s
+    logging: *json-logging
+
+  worker:
+    profiles: ["upstream"]
+    image: ${WEB_IMAGE:?WEB_IMAGE is required}
+    pull_policy: never
+    container_name: ${COMPOSE_PROJECT_NAME}-worker
+    restart: unless-stopped
+    command: ["node", "node_modules/tsx/dist/cli.mjs", "src/worker/index.ts"]
+    environment: *app-environment
+    volumes:
+      - generated-media:/app/data
+    networks:
+      - backend
+      - egress
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mint:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    cpus: "0.35"
+    mem_limit: 512m
+    pids_limit: 256
+    stop_grace_period: 90s
+    logging: *json-logging
+
+networks:
+  backend:
+    name: ${COMPOSE_PROJECT_NAME}_backend
+    internal: true
+  egress:
+    name: ${COMPOSE_PROJECT_NAME}_egress
+
+volumes:
+  mysql-data:
+    name: ${COMPOSE_PROJECT_NAME}_mysql-data
+  generated-media:
+    name: ${COMPOSE_PROJECT_NAME}_generated-media

@@ -40,7 +40,7 @@ sherlockToken 实测矩阵（铸造方式 × 铸造 IP 类型 → token 质量�
 
 3. **sherlockToken（`x-arp-session-id`）**：维护浏览器会话态，通过内置 [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) 铸造服务（headful + Xvfb）自动铸造或手动输入，由 worker 按固定周期（默认 5 分钟）自动刷新，提交链路自动使用最新 token。
 
-> 🎁 sherlockToken 由内置 fingerprint-chromium 铸造服务自动维护，Docker 一键部署零配置开箱即用。
+> sherlockToken 可由内置 fingerprint-chromium 铸造服务维护；该能力需要显式启用 `upstream` profile，并会访问 Adobe。
 
 ---
 
@@ -70,33 +70,37 @@ git clone https://github.com/songsongQAQ/adobe2api-plus.git
 cd adobe2api-plus
 ```
 
-2. **一键构建并启动**（零配置，开箱即用——自动拉取 MySQL 8 镜像、创建数据库与表结构、启动 Web + Worker + mint 铸造服务）：
+2. **生成部署密钥并填写 `.env`**：
+
+```bash
+cp .env.example .env
+# 填写全部必填变量；SESSION_SECRET/ENCRYPTION_KEY 可分别用 openssl rand -hex 32 生成
+```
+
+3. **构建并启动 Web + MySQL**（默认不启动会访问 Adobe 的 Worker/mint）：
 
 ```bash
 docker compose up -d --build
 ```
 
-3. **sherlockToken 铸造流程（内置 fingerprint-chromium）**：
+4. **sherlockToken 铸造流程（内置 fingerprint-chromium）**：
 
-- **Docker 一键部署（自动，无需任何配置）**：内置 `mint` 容器（fingerprint-chromium 148 + Xvfb 有头铸造）。worker 每 5 分钟自动向 mint 铸造新 token 并全局保存，提交链路自动携带最新值，全程无外部依赖。
+- **Docker 显式启用**：获得上游访问授权后运行 `docker compose --profile upstream up -d --build mint worker`。内置 `mint` 容器使用 fingerprint-chromium 148 + Xvfb；worker 默认每 5 分钟向 mint 请求新 token，这会访问 Adobe。
 - **本地开发（自动）**：`.env.development` 设置 `FP_CHROME_BIN`（本进程直启 fingerprint-chromium 铸造）或 `SHERLOCK_MINT_API`（连接自建/远程 mint 铸造服务）。
 - **手动输入（兜底）**：未配置任何铸造引擎时，在后台「sherlock」页粘贴手动获取的 token，不影响其它功能。获取方式：在已登录 `firefly.adobe.com` 的浏览器控制台执行：
   ```js
   copy(document.cookie.match(/(?:^|;\s*)sherlockToken=([^;]+)/)?.[1] ?? "")
   ```
 
-4. **访问管理后台**：
+5. **访问管理后台**：
 
 - 地址：`http://127.0.0.1:${WEB_PORT:-3000}/login`
-- 账号：`admin`
-- 密码：`admin`
+- 账号和密码：使用 `.env` 中自行设置的 `ADMIN_BOOTSTRAP_USERNAME` / `ADMIN_BOOTSTRAP_PASSWORD`
 
-> - **默认管理员账号密码为 `admin` / `admin`**（首次启动自动创建），**生产环境务必修改**。
-> - 安全密钥（`SESSION_SECRET` / `ENCRYPTION_KEY`）已内置默认值，开箱即用。生产环境请创建 `.env` 覆盖：`cp .env.example .env`，用 `openssl rand -hex 32`（会话密钥）与 `openssl rand -hex 32`（加密密钥）生成自己的随机值。
+> - 不再提供默认管理员、会话密钥、加密密钥或 MySQL 密码；变量缺失时 Compose 会拒绝启动。
 > - 数据库（MySQL 8）随 compose 自动启动，表结构由应用首次启动时自动迁移，**无需手动 `db:push`**。
 > - 数据持久化：MySQL 数据在 `mysql-data` 卷，生成媒体在 `generated-media` 卷。
 > - 查看状态/日志：`docker compose ps`、`docker compose logs -f web worker`。
-> - 数据库账号默认 `adobe / adobe`（库名 `adobe`），可通过 `.env` 的 `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` 覆盖。
 
 ### 本地开发 / 运行
 
@@ -487,15 +491,15 @@ Web 与 Worker 在启动前会主动校验配置（`validateRuntime`），关键
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `DATABASE_URL` | 本地开发 ✅ / Docker 自动 | MySQL 连接串（`mysql:` 协议，含库名） |
-| `SESSION_SECRET` | Docker 内置默认 | 会话签名密钥（≥32 字节） |
-| `ENCRYPTION_KEY` | Docker 内置默认 | 凭据加密密钥（≥16 字节） |
-| `ADMIN_BOOTSTRAP_USERNAME` | 默认 `admin` | 管理员初始账号（首次启动自动创建） |
-| `ADMIN_BOOTSTRAP_PASSWORD` | 默认 `admin` | 管理员初始密码 |
+| `DATABASE_URL` | 本地开发 ✅ / Docker 自动组合 | MySQL 连接串（`mysql:` 协议，含库名） |
+| `SESSION_SECRET` | ✅ | 会话签名密钥（≥32 字节） |
+| `ENCRYPTION_KEY` | ✅ | 凭据加密密钥（32 字节，建议 64 位 hex） |
+| `ADMIN_BOOTSTRAP_USERNAME` | ✅ | 管理员初始账号（首次登录时创建） |
+| `ADMIN_BOOTSTRAP_PASSWORD` | ✅ | 强管理员初始密码 |
 
 > 其余参数（生成媒体目录、Adobe 上游地址、Token 刷新间隔、媒体保留时长、代理池等）均可在管理后台「系统设置」中配置，无需通过环境变量设置。
 >
-> sherlockToken 自动铸造变量（`SHERLOCK_MINT_API` / `FP_CHROME_BIN` 等）见 `.env.example`；Docker 一键部署无需配置（内置 mint 容器）；均不配置则走后台手动输入 token。
+> sherlockToken 自动铸造变量（`SHERLOCK_MINT_API` / `FP_CHROME_BIN` 等）见 `.env.example`；Docker 必须显式启用 `upstream` profile 才启动 Worker/mint；均不配置则走后台手动输入 token。
 
 ---
 

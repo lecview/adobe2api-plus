@@ -1,0 +1,140 @@
+name: Verify and package linux-amd64 images
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: verify-package-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_DATABASE: adobe_ci
+          MYSQL_USER: adobe_ci
+          MYSQL_PASSWORD: ci-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root-password --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      RUN_MYSQL_INTEGRATION: "1"
+      DATABASE_URL: mysql://adobe_ci:ci-password@127.0.0.1:3306/adobe_ci?connectionLimit=5
+      MYSQL_ROOT_PASSWORD: ci-root-password
+      SESSION_SECRET: ci-session-secret-used-only-for-isolated-tests
+      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      MEDIA_ROOT: /tmp/adobe2api-plus-ci-media
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run build
+      - name: Validate isolated KR Compose expansion
+        env:
+          COMPOSE_PROJECT_NAME: aimasker-adobe2api-plus-ci
+          DEPLOY_SHA: 0000000000000000000000000000000000000000
+          WEB_PORT: "8300"
+          WEB_IMAGE: aimasker/adobe2api-plus-web:ci
+          MINT_IMAGE: aimasker/adobe2api-plus-mint:ci
+          MYSQL_IMAGE: mysql:8.0
+          MYSQL_DATABASE: adobe_ci
+          MYSQL_USER: adobe_ci
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_PASSWORD: ci-password
+          SESSION_SECRET: ci-session-secret-used-only-for-isolated-tests
+          ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+          ADMIN_BOOTSTRAP_USERNAME: ci-admin
+          ADMIN_BOOTSTRAP_PASSWORD: ci-admin-password
+        run: docker compose -f deploy/kr/docker-compose.yml config --quiet
+
+  package:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build web image
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg GIT_SHA="$GITHUB_SHA" \
+            --tag "aimasker/adobe2api-plus-web:$GITHUB_SHA" \
+            --metadata-file web-build-metadata.json \
+            --provenance=false \
+            --load .
+      - name: Build mint image without running it
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --file docker/mint/Dockerfile \
+            --tag "aimasker/adobe2api-plus-mint:$GITHUB_SHA" \
+            --metadata-file mint-build-metadata.json \
+            --provenance=false \
+            --load docker/mint
+      - name: Package immutable deployment assets
+        id: package
+        run: |
+          stem="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          archive="adobe2api-plus-images-${stem}.tar.zst"
+          digests="IMAGE-DIGESTS-${stem}.txt"
+          sums="SHA256SUMS-${stem}.txt"
+          {
+            printf 'source_commit=%s\n' "$GITHUB_SHA"
+            printf 'web_image=%s\n' "aimasker/adobe2api-plus-web:$GITHUB_SHA"
+            printf 'web_image_id=%s\n' "$(docker image inspect --format '{{.Id}}' "aimasker/adobe2api-plus-web:$GITHUB_SHA")"
+            printf 'mint_image=%s\n' "aimasker/adobe2api-plus-mint:$GITHUB_SHA"
+            printf 'mint_image_id=%s\n' "$(docker image inspect --format '{{.Id}}' "aimasker/adobe2api-plus-mint:$GITHUB_SHA")"
+          } > "$digests"
+          docker save \
+            "aimasker/adobe2api-plus-web:$GITHUB_SHA" \
+            "aimasker/adobe2api-plus-mint:$GITHUB_SHA" \
+            | zstd -T0 -10 -o "$archive"
+          sha256sum "$archive" "$digests" web-build-metadata.json mint-build-metadata.json > "$sums"
+          printf 'archive=%s\n' "$archive" >> "$GITHUB_OUTPUT"
+          printf 'digests=%s\n' "$digests" >> "$GITHUB_OUTPUT"
+          printf 'sums=%s\n' "$sums" >> "$GITHUB_OUTPUT"
+          printf 'stem=%s\n' "$stem" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deployment-${{ steps.package.outputs.stem }}
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.digests }}
+            ${{ steps.package.outputs.sums }}
+            web-build-metadata.json
+            mint-build-metadata.json
+          retention-days: 7
+          if-no-files-found: error
+      - name: Publish public immutable release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: deployment-${{ github.sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          DIGESTS: ${{ steps.package.outputs.digests }}
+          SUMS: ${{ steps.package.outputs.sums }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "Deployment images $GITHUB_SHA" --notes "linux/amd64 images built and verified by GitHub Actions. Worker and mint are not started by the default KR Compose profile."
+          fi
+          gh release upload "$TAG" "$ARCHIVE" "$DIGESTS" "$SUMS" web-build-metadata.json mint-build-metadata.json

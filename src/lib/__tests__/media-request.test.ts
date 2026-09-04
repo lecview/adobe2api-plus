@@ -201,7 +201,7 @@ describe("media protocol normalization", () => {
     expect(result).toMatchObject({ protocol: "kling", kind: "video", model: "seedance20-fast-5s-16x9-1080p", images: ["https://example.com/first.png"], duration: 5 });
   });
 
-  it("maps image size to 1K, falls back auto to 1:1, and keeps mask separate", () => {
+  it("keeps the model resolution, falls back auto to 1:1, and keeps mask separate", () => {
     const result = normalizeImageRequest({
       model: "gpt-image-2k-16x9",
       prompt: "edit this",
@@ -210,7 +210,7 @@ describe("media protocol normalization", () => {
       images: ["data:image/png;base64,cG5n"],
       mask: { image_url: { url: "data:image/png;base64,bWFzaw==" } },
     }, "openai-edits");
-    expect(result).toMatchObject({ aspect_ratio: "1:1", output_resolution: "1K", images: ["data:image/png;base64,cG5n"], mask: "data:image/png;base64,bWFzaw==" });
+    expect(result).toMatchObject({ aspect_ratio: "1:1", output_resolution: "2K", images: ["data:image/png;base64,cG5n"], mask: "data:image/png;base64,bWFzaw==" });
   });
 
   it("prefers an explicit aspect ratio over a conflicting size ratio", () => {

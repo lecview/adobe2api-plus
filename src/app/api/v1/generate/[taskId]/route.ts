@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { generationJob, jobEvent, mediaAsset } from "@/lib/db/schema";
+import { generationJob, mediaAsset } from "@/lib/db/schema";
 import { requireServiceApiKey } from "@/lib/service-auth";
 import { getRequestId, safeErrorMessage, statusForErrorCode, toErrorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
@@ -14,10 +14,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ task
     if (!job) {
       return Response.json({ error: { message: "task not found", type: "invalid_request_error", code: "job_not_found", request_id: requestId } }, { status: 404, headers: { "x-request-id": requestId } });
     }
-    // 原 Prisma include: { media: true, events: { orderBy: { sequence: "desc" }, take: 1 } }
-    // 拆为两次查询，等价于取第一条 media 和最近一条事件
+    // 查询首个媒体资产；任务状态与错误已经保存在 generationJob。
     const [media] = await db.select().from(mediaAsset).where(eq(mediaAsset.jobId, taskId)).limit(1);
-    const [latestEvent] = await db.select().from(jobEvent).where(eq(jobEvent.jobId, taskId)).orderBy(desc(jobEvent.sequence)).limit(1);
     const error = job.errorCode ? safeErrorMessage(job.errorCode, statusForErrorCode(job.errorCode)) : null;
     // returnOriginalUrl 开启时 media.url 存原地址，直接返回；否则返回本地存储地址
     const imageUrl = media ? (media.url && media.url.length ? media.url : `${config.mediaPublicPrefix()}/${media.objectKey}`) : null;

@@ -254,7 +254,6 @@ export default function AccountsPage() {
   }, [pageSize]);
 
   // 首次加载需要把远端 MySQL 状态同步到页面；这是该页面唯一的外部数据订阅。
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
 
   async function request(method: "POST" | "PATCH" | "DELETE", body: Record<string, unknown>, tokenId?: string, tokenAction?: TokenAction) {

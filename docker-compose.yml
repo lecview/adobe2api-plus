@@ -1,14 +1,15 @@
 name: adobe2api-plus
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 一键部署（零配置，开箱即用）：
-#   docker compose up -d --build   # 自动构建镜像并启动 mysql + web + worker + mint
+# 安全部署：
+#   cp .env.example .env           # 先填写全部必填变量
+#   docker compose up -d --build   # 默认只启动 mysql + web
+#   docker compose --profile upstream up -d --build  # 明确授权后才启动 worker + mint
 #
 # mint = fingerprint-chromium 铸造服务（headful + Xvfb，替代 RoxyBrowser），
 # sherlockToken 由 worker 按周期（默认 5 分钟）自动向 mint 拉取，无需任何外部依赖。
 #
-# 默认管理员 admin / admin，密钥用内置默认值。
-# 生产环境务必在 .env 中覆盖 SESSION_SECRET / ENCRYPTION_KEY / 管理员密码。
+# 不提供默认管理员、密钥或数据库密码。
 # 数据库表结构由应用首次启动时自动创建（幂等 migrate，无需手动 db:push）。
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -17,11 +18,11 @@ x-mint-env: &mint-env
 
 x-app-env: &app-env
   <<: *mint-env
-  DATABASE_URL: mysql://${MYSQL_USER:-adobe}:${MYSQL_PASSWORD:-adobe}@mysql:3306/${MYSQL_DATABASE:-adobe}
-  SESSION_SECRET: ${SESSION_SECRET:-ade29e218eecbf7cb7abf14c6fbb8bac5f9396cb2784c094d2a4dee1020abf53}
-  ENCRYPTION_KEY: ${ENCRYPTION_KEY:-dbc3134bae062969b83084f7aced31710d55372228a1231066adc6c0777778ab}
-  ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
-  ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-admin}
+  DATABASE_URL: mysql://${MYSQL_USER:?MYSQL_USER is required}:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@mysql:3306/${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+  ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:?ADMIN_BOOTSTRAP_USERNAME is required}
+  ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:?ADMIN_BOOTSTRAP_PASSWORD is required}
   MEDIA_ROOT: /app/data/generated
   NEXT_TELEMETRY_DISABLED: "1"
 
@@ -33,10 +34,10 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-adobe}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-adobe}
-      MYSQL_USER: ${MYSQL_USER:-adobe}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-adobe}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
       TZ: ${TZ:-Asia/Shanghai}
     # 数据库不对外暴露端口，仅 compose 内网（web/worker 通过服务名 mysql 访问）
     # 表结构由应用启动时自动迁移（src/lib/schema.ts 的 ensureSchema），无需 init 脚本。
@@ -54,6 +55,7 @@ services:
   # fingerprint-chromium 148 仅发布 x86_64 二进制：x86_64 服务器原生运行；
   # Apple Silicon 宿主机由 Docker Desktop 模拟 amd64 运行（能跑但铸造较慢，生产请用 x86_64）。
   mint:
+    profiles: ["upstream"]
     platform: linux/amd64
     build:
       context: ./docker/mint
@@ -79,13 +81,11 @@ services:
       dockerfile: Dockerfile
     environment: *app-env
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
     volumes:
       - generated-media:/app/data
     depends_on:
       mysql:
-        condition: service_healthy
-      mint:
         condition: service_healthy
     restart: unless-stopped
 
@@ -94,6 +94,7 @@ services:
   # 且同镜像名并发导出在 compose v5 bake 下会偶发 "already exists"）。
   # compose 先完成全部 build 再启动容器，因此 worker 总能拿到 web 刚构建好的镜像。
   worker:
+    profiles: ["upstream"]
     image: adobe2api-plus:local
     command: ["node", "node_modules/tsx/dist/cli.mjs", "src/worker/index.ts"]
     environment: *app-env

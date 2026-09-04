@@ -38,7 +38,7 @@ Measured sherlockToken matrix (minting mode × minting IP type → token quality
 
 3. **sherlockToken (`x-arp-session-id`)**: maintains the browser session state, minted by the built-in [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) mint service (headful + Xvfb) or entered manually, auto-refreshed by the worker on a fixed interval (default 5 minutes), and automatically used by the submission pipeline.
 
-> 🎁 sherlockToken is minted automatically by the built-in fingerprint-chromium service — zero-config with Docker one-click deployment.
+> The built-in fingerprint-chromium service can maintain sherlockToken; it is placed behind an explicit `upstream` profile because it accesses Adobe.
 
 ---
 
@@ -68,33 +68,37 @@ git clone https://github.com/songsongQAQ/adobe2api-plus.git
 cd adobe2api-plus
 ```
 
-2. **Build and start everything in one command** (zero-config, works out of the box — pulls MySQL 8, creates database and tables, starts Web + Worker):
+2. **Create and fill the deployment environment file**:
+
+```bash
+cp .env.example .env
+# Fill every required value. Generate SESSION_SECRET and ENCRYPTION_KEY with openssl rand -hex 32.
+```
+
+3. **Build and start Web + MySQL** (Worker/mint stay disabled by default):
 
 ```bash
 docker compose up -d --build
 ```
 
-3. **sherlockToken minting flow (built-in fingerprint-chromium)**:
+4. **sherlockToken minting flow (built-in fingerprint-chromium)**:
 
-- **Docker one-click deployment (automatic, zero config)**: the built-in `mint` container (fingerprint-chromium 148 + Xvfb, headful) mints tokens; the worker automatically mints a fresh token via mint every 5 minutes and stores it globally — the submission pipeline always carries the latest value, with no external dependencies.
+- **Explicit Docker opt-in**: after upstream access is approved, run `docker compose --profile upstream up -d --build mint worker`. The worker requests a new token from the built-in headful mint service every five minutes by default; this accesses Adobe.
 - **Local development (automatic)**: set `FP_CHROME_BIN` in `.env.development` (start fingerprint-chromium in-process) or `SHERLOCK_MINT_API` (connect to a self-hosted / remote mint service).
 - **Manual entry (fallback)**: when no minting engine is configured, paste a manually obtained token on the admin "sherlock" page — other features are unaffected. How to get one: run this in the browser console while logged into `firefly.adobe.com`:
   ```js
   copy(document.cookie.match(/(?:^|;\s*)sherlockToken=([^;]+)/)?.[1] ?? "")
   ```
 
-4. **Access the admin console**:
+5. **Access the admin console**:
 
 - URL: `http://127.0.0.1:3000/login`
-- Username: `admin`
-- Password: `admin`
+- Username/password: the values you set for `ADMIN_BOOTSTRAP_USERNAME` / `ADMIN_BOOTSTRAP_PASSWORD`
 
-> - **Default admin credentials are `admin` / `admin`** (auto-created on first start) — **change them in production**.
-> - Secrets (`SESSION_SECRET` / `ENCRYPTION_KEY`) ship with built-in defaults, so it works out of the box. In production, create a `.env` to override them: `cp .env.example .env`, then generate your own with `openssl rand -hex 32` (session) and `openssl rand -hex 16` (encryption).
+> - There are no default admin credentials, session/encryption secrets, or MySQL passwords. Compose refuses to start when required values are missing.
 > - MySQL 8 starts automatically with compose; tables are migrated automatically on first start — **no manual `db:push` needed**.
 > - Persistence: MySQL data in the `mysql-data` volume, generated media in the `generated-media` volume.
 > - Status / logs: `docker compose ps`, `docker compose logs -f web worker`.
-> - Default database credentials are `adobe / adobe` (database `adobe`); override via `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` in `.env`.
 
 ### Local development
 
@@ -485,15 +489,15 @@ The web and worker processes validate their configuration up front (`validateRun
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Local dev ✅ / Docker auto | MySQL connection string (`mysql:` scheme, includes a database name) |
-| `SESSION_SECRET` | Docker built-in default | Session signing secret (≥32 bytes) |
-| `ENCRYPTION_KEY` | Docker built-in default | Credential encryption key (≥16 bytes) |
-| `ADMIN_BOOTSTRAP_USERNAME` | default `admin` | Initial admin account (auto-created on first start) |
-| `ADMIN_BOOTSTRAP_PASSWORD` | default `admin` | Initial admin password |
+| `DATABASE_URL` | Local dev ✅ / composed by Docker | MySQL connection string (`mysql:` scheme, includes a database name) |
+| `SESSION_SECRET` | ✅ | Session signing secret (≥32 bytes) |
+| `ENCRYPTION_KEY` | ✅ | 32-byte credential encryption key (64 hex characters recommended) |
+| `ADMIN_BOOTSTRAP_USERNAME` | ✅ | Initial admin account (created on first login) |
+| `ADMIN_BOOTSTRAP_PASSWORD` | ✅ | Strong initial admin password |
 
 > All other settings (media directory, Adobe upstream URL, token refresh interval, media retention, proxy pool, etc.) are configurable in the admin console under **System Settings** — no environment variables needed.
 >
-> Automatic sherlockToken minting variables (`SHERLOCK_MINT_API` / `FP_CHROME_BIN`, etc.) are listed in `.env.example`; Docker one-click deployment needs none (built-in mint container); if unset, you can enter the token manually in the admin console.
+> Automatic sherlockToken minting variables (`SHERLOCK_MINT_API` / `FP_CHROME_BIN`, etc.) are listed in `.env.example`; Docker starts Worker/mint only with the explicit `upstream` profile. If no engine is configured, enter the token manually in the admin console.
 
 ---
 
