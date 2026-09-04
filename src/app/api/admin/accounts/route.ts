@@ -352,7 +352,18 @@ async function createRefreshProfile(value: CookieImport, options: { accountId?: 
   const [existingProfile] = await db.select({ id: refreshProfile.id }).from(refreshProfile).where(eq(refreshProfile.accountId, resolvedAccount.id)).limit(1);
   if (existingProfile) {
     await db.update(refreshProfile)
-      .set({ name: value.name || null, encryptedCookie: encryptSecret(value.cookie), externalAccountId: options.externalAccountId || null, status: "ACTIVE", enabled: true, updatedAt: new Date() })
+      .set({
+        name: value.name || null,
+        encryptedCookie: encryptSecret(value.cookie),
+        externalAccountId: options.externalAccountId || null,
+        status: "ACTIVE",
+        enabled: true,
+        nextRefreshAt: null,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        lastError: null,
+        updatedAt: new Date(),
+      })
       .where(eq(refreshProfile.id, existingProfile.id));
     return { id: existingProfile.id, accountId: resolvedAccount.id, duplicate: true };
   }
@@ -421,6 +432,65 @@ async function mapAccounts() {
     profileIds: Set<string>;
     refreshProfileDetails: Array<Record<string, unknown>>;
   }>();
+
+  // 账号列表不能以 Token 表为入口：Cookie 刚导入、尚待 Worker 换取 Token 时，
+  // 账号与 refreshProfile 已存在但 adobetoken 为空。先读取全部账号及其 Cookie
+  // 档案，确保这类“待刷新”账号也可见，再叠加 Token 元数据。
+  const accountRows = await db
+    .select({
+      id: adobeAccount.id,
+      displayName: adobeAccount.displayName,
+      externalId: adobeAccount.externalId,
+      email: adobeAccount.email,
+      status: adobeAccount.status,
+      lastRefreshAt: adobeAccount.lastRefreshAt,
+      lastRefreshError: adobeAccount.lastRefreshError,
+      profileId: refreshProfile.id,
+      profileName: refreshProfile.name,
+      profileStatus: refreshProfile.status,
+      profileEnabled: refreshProfile.enabled,
+      profileNextRefreshAt: refreshProfile.nextRefreshAt,
+      profileLastAttemptAt: refreshProfile.lastAttemptAt,
+      profileLastSuccessAt: refreshProfile.lastSuccessAt,
+      profileConsecutiveFailures: refreshProfile.consecutiveFailures,
+      profileLastHttpStatus: refreshProfile.lastHttpStatus,
+      profileLastError: refreshProfile.lastError,
+    })
+    .from(adobeAccount)
+    .leftJoin(refreshProfile, eq(refreshProfile.accountId, adobeAccount.id))
+    .orderBy(asc(adobeAccount.createdAt), asc(refreshProfile.createdAt));
+
+  for (const row of accountRows) {
+    const account = accountMap.get(row.id) ?? {
+      id: row.id,
+      displayName: row.displayName,
+      externalId: row.externalId,
+      email: row.email,
+      status: row.status,
+      lastRefreshAt: row.lastRefreshAt,
+      lastRefreshError: row.lastRefreshError,
+      tokenCount: 0,
+      profileIds: new Set<string>(),
+      refreshProfileDetails: [],
+    };
+    if (row.profileId && !account.profileIds.has(row.profileId)) {
+      account.profileIds.add(row.profileId);
+      account.refreshProfileDetails.push({
+        id: row.profileId,
+        name: row.profileName,
+        status: row.profileStatus?.toLowerCase() ?? "active",
+        enabled: Boolean(row.profileEnabled),
+        nextRefreshAt: row.profileNextRefreshAt,
+        lastAttemptAt: row.profileLastAttemptAt,
+        lastSuccessAt: row.profileLastSuccessAt,
+        consecutiveFailures: row.profileConsecutiveFailures ?? 0,
+        lastHttpStatus: row.profileLastHttpStatus,
+        lastError: row.profileLastError ? safeLastError(row.profileLastError) : null,
+      });
+    }
+    accountMap.set(row.id, account);
+  }
+
   const tokens = rows.map((row) => {
     const account = accountMap.get(row.account_id) ?? {
       id: row.account_id,
@@ -501,11 +571,13 @@ async function mapAccounts() {
 }
 
 /**
- * Cookie 导入只负责快速落库；Adobe 刷新交给当前 Node 进程/Worker 后台执行，
- * 避免远程 MySQL 和 Adobe 上游延迟阻塞管理员的新增请求。
+ * Cookie 导入只负责落库并把资料标为立即到期；真正的 Adobe 刷新只由具有
+ * 独立 egress 的 Worker 执行，Web 容器不直接访问上游。
  */
-function queueRefresh(profileId: string): void {
-  setImmediate(() => { void refreshProfileNow(profileId).catch(() => undefined); });
+async function queueRefresh(profileId: string): Promise<void> {
+  await db.update(refreshProfile)
+    .set({ nextRefreshAt: null, leaseOwner: null, leaseExpiresAt: null, updatedAt: new Date() })
+    .where(eq(refreshProfile.id, profileId));
 }
 
 export async function GET(request: Request) {
@@ -745,11 +817,9 @@ export async function POST(request: Request) {
           if (tokenResult) {
             await db.update(adobeToken).set({ refreshProfileId: profileResult.id, autoRefreshEnabled: true, source: "auto_refresh", updatedAt: new Date() }).where(eq(adobeToken.id, tokenResult.tokenId));
           }
-          refreshPending = !profileResult.duplicate;
-          if (refreshPending) {
-            refreshPendingCount += 1;
-            queueRefresh(profileResult.id);
-          }
+          refreshPending = true;
+          refreshPendingCount += 1;
+          await queueRefresh(profileResult.id);
         }
         accountResults.push({ ok: true, tokenId: tokenResult?.tokenId, profileId: profileResult?.id, duplicate: Boolean(tokenResult?.duplicate || profileResult?.duplicate), refreshed: false, refreshPending });
       } catch (error) {
@@ -762,11 +832,9 @@ export async function POST(request: Request) {
       if (!value.cookie) { cookieResults.push({ ok: false, reason: "empty_cookie" }); continue; }
       try {
         const profile = await createRefreshProfile(value);
-        const refreshPending = !profile.duplicate;
-        if (refreshPending) {
-          refreshPendingCount += 1;
-          queueRefresh(profile.id);
-        }
+        const refreshPending = true;
+        refreshPendingCount += 1;
+        await queueRefresh(profile.id);
         cookieResults.push({ ok: true, profileId: profile.id, duplicate: profile.duplicate, refreshed: false, refreshPending });
       } catch (error) {
         cookieResults.push({ ok: false, reason: error instanceof Error ? error.message : "import_failed" });
@@ -853,3 +921,4 @@ export async function DELETE(request: Request) {
     return Response.json({ disabled: true, account: updated, request_id: getRequestId(request) });
   } catch (error) { return handleAdminError(error, request); }
 }
+

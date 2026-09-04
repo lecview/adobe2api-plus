@@ -498,10 +498,8 @@ async function persistCreditFailure(input: CreditFailureInput): Promise<void> {
         .where(eq(refreshProfileTable.id, input.refreshProfileId));
     }
   });
-  // 401 = token 永久失效，账号不可再用：彻底删除（含孤儿 profile），job 存快照
-  if (input.unauthorized) {
-    await deleteAdobeAccount(input.accountId).catch((error) => console.error(`[credits] 删除 401 账号失败 account=${input.accountId}`, error instanceof Error ? error.message : error));
-  }
+  // 401 只停用 Token/账号/刷新资料，保留密文记录供管理员重新导入后恢复；
+  // 不因一次上游认证失败自动删除账号数据。
 }
 
 /**
@@ -796,10 +794,8 @@ export async function refreshTokenCreditsBatch(
   });
 
   // 3. 写库：ok 结果每 batchSize 个一个事务批量更新；失败结果逐个持久化。
-  //    401（unauthorized）必须真实删除账号（token/Cookie 资料/账号），只计数不删号
-  //    会让失效账号反复被选中——批量路径与单条路径（refreshTokenCredits）行为一致。
+  //    401（unauthorized）只标记 Token/账号/刷新资料失效，不自动删除数据。
   const okItems: Array<{ tokenId: string; balance: CreditBalance }> = [];
-  const deletedAccountIds = new Set<string>();
   for (const result of results) {
     const row = accountByTokenId.get(result.id);
     if (!row) continue;
@@ -821,8 +817,7 @@ export async function refreshTokenCreditsBatch(
       continue;
     }
     if (result.status === "unauthorized") {
-      // 401 = token 永久失效：先标记（token DISABLED / 账号 UNAVAILABLE / 资料 DISABLED），
-      // 再彻底删除账号；删除失败必须打日志，不能静默吞掉。
+      // 401：标记 token DISABLED / 账号 UNAVAILABLE / 资料 DISABLED，但保留记录。
       await persistCreditFailure({
         tokenId: row.token.id,
         accountId: row.account.id,
@@ -830,10 +825,6 @@ export async function refreshTokenCreditsBatch(
         message: result.message ?? "Credits request returned 401",
         unauthorized: true,
       }).catch((error) => console.error(`[credits-batch] 标记 401 失败 token=${row.token.id}`, error instanceof Error ? error.message : error));
-      if (!deletedAccountIds.has(row.account.id)) {
-        deletedAccountIds.add(row.account.id);
-        await deleteAdobeAccount(row.account.id).catch((error) => console.error(`[credits-batch] 删除 401 账号失败 account=${row.account.id}`, error instanceof Error ? error.message : error));
-      }
     } else {
       // 非 401 失败：只记录 creditsError，不动账号状态
       await persistCreditFailure({
@@ -864,3 +855,4 @@ export async function refreshDueProfiles(workerId: string, limit = 1): Promise<n
   for (const profile of profiles) if (await refreshProfile(profile.id, workerId)) refreshed += 1;
   return refreshed;
 }
+

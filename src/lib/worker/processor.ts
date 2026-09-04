@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { adobeToken, entity, generationJob, type AttemptStatus, type JobStage, type JobStatus } from "@/lib/db/schema";
 import { claimNextJob, appendJobEvent, assertJobLease, completeJobWithMedia, completeJobWithResult, finishJobAttempt, recordJobAttempt, releaseJobLease, renewJobLease, transitionJob, updateJobWithLease } from "@/lib/jobs";
 import { AdobeClient, AdobeUpstreamError } from "@/lib/adobe/client";
-import { selectAdobeAccount, selectAdobeGenerationAccount, deleteAdobeAccount, markAdobeTokenFailure, markAdobeTokenSuccess, markAdobeAccountRiskFlagged } from "@/lib/adobe/account";
+import { selectAdobeAccount, selectAdobeGenerationAccount, markAdobeTokenFailure, markAdobeTokenSuccess, markAdobeAccountRiskFlagged } from "@/lib/adobe/account";
 import { refreshGlobalSherlockToken } from "@/lib/adobe/sherlock";
 import { accountIdFromToken, queryCreditsUsed } from "@/lib/adobe/refresh";
 import { cleanupReferenceSources, closeReferenceMedia, loadReferenceSources, openReferenceMedia, type ReferenceMedia } from "@/lib/adobe/input";
@@ -720,9 +720,9 @@ export async function processJob(jobId: string, workerId: string, dependencies: 
     const [current] = await db.select({ status: generationJob.status, upstreamTaskId: generationJob.upstreamTaskId, upstreamPollUrl: generationJob.upstreamPollUrl }).from(generationJob).where(eq(generationJob.id, jobId)).limit(1).catch(() => []);
     if (accountContext && error instanceof AdobeUpstreamError && error.code === "adobe_auth_failed") {
       if (error.realUpstreamStatus === 401) {
-        // 401：token 彻底失效，删除该账号（含 token、Cookie 刷新资料），避免反复被选中
-        const failedAccountId = accountContext.accountId;
-        await deleteAdobeAccount(failedAccountId).catch((deleteError) => console.error(`[processor] 删除 401 账号失败 account=${failedAccountId}`, deleteError instanceof Error ? deleteError.message : deleteError));
+        // 401 只停用当前 Token 并保留账号/Cookie 刷新资料，避免一次认证失败造成
+        // 不可恢复的数据删除。管理员可重新导入 Cookie 或 Token 后恢复账号。
+        await markAdobeTokenFailure(accountContext.tokenId, errorMessage(error));
       } else if (error.realUpstreamStatus === 403) {
         // 403：通常是「账号无某模型权限」（如 gateway_model_not_authorized，视频模型），
         // 不代表 token 失效 —— 绝不标 INVALID/不删号（token 完全可用）。
@@ -778,3 +778,4 @@ export async function processOne(workerId: string): Promise<boolean> {
   await processJob(job.id, workerId);
   return true;
 }
+
